@@ -55,3 +55,15 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 .colorRow input[type=color]{width:44px;height:34px;padding:0;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:transparent}
 
 .canvasWrap:active{cursor:grabbing}
+
+/* ── Config collapsible blocks ─────────────────────────────── */
+.cfgBlock{border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;background:rgba(255,255,255,.02)}
+.cfgHead{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;cursor:pointer;user-select:none;gap:10px}
+.cfgHead:hover{background:rgba(255,255,255,.04)}
+.cfgBody{padding:10px;border-top:1px solid var(--border)}
+.cfgArrow{font-size:10px;color:var(--muted);transition:transform .18s;display:inline-block}
+.cfgSwatchWrap{position:relative;display:inline-flex;align-items:center;cursor:pointer;border-radius:6px}
+.cfgSwatchWrap:hover .cfgSwatch{box-shadow:0 0 0 2px rgba(255,255,255,.55)}
+.cfgSwatch{cursor:pointer;transition:box-shadow .15s}
+.cfgSwatchPicker{position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;border:none;padding:0;margin:0}
+.cfgDelBtn{color:#ff6b6b!important}

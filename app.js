@@ -207,10 +207,10 @@ function buildSelectedForm(){
   let obj=null, floorName="", roomName="";
   if(state.selected.kind==="room"){
     const res=findRoom(state.selected.roomId); if(!res) return;
-    obj=res.room; floorName=res.floor.name; header.textContent=`${floorName} · Room`;
+    obj=res.room; floorName=res.floor.name; header.textContent=`${floorName} \u00b7 Room`;
   } else {
     const res=findItem(state.selected.itemId); if(!res) return;
-    obj=res.item; floorName=res.floor.name; roomName=res.room.name; header.textContent=`${floorName} · ${roomName} · ${obj.type}`;
+    obj=res.item; floorName=res.floor.name; roomName=res.room.name; header.textContent=`${floorName} \u00b7 ${roomName} \u00b7 ${obj.type}`;
   }
 
   const fields = state.selected.kind==="room" ? ROOM_FIELDS : ITEM_FIELDS;
@@ -288,11 +288,19 @@ function duplicateSelected(){
     const res=findRoom(state.selected.roomId); if(!res) return;
     const copy=JSON.parse(JSON.stringify(res.room)); copy.id=guid(); copy.name=(copy.name||"Room")+" (Copy)";
     copy.items=(copy.items||[]).map(it=>{ const c=JSON.parse(JSON.stringify(it)); c.id=guid(); c.roomId=copy.id; return c; });
+    // Place copy's NW corner at center of original
+    const origNW=normalizeRectAbs(res.room);
+    const cx=origNW.xIn+res.room.wIn/2; const cy=origNW.yIn+res.room.hIn/2;
+    copy.corner="NW"; copy.xIn=cx; copy.yIn=cy;
     res.floor.rooms.push(copy);
     setSelected({kind:"room", floorId:res.floor.id, roomId:copy.id});
   } else {
     const res=findItem(state.selected.itemId); if(!res) return;
     const copy=JSON.parse(JSON.stringify(res.item)); copy.id=guid(); copy.name=(copy.name||copy.type)+" (Copy)"; copy.roomId=res.room.id;
+    // Place copy's NW corner at center of original (relative to room)
+    const origRel=normalizeRectRelToRoomPrimary(res.item, res.room);
+    const cx=origRel.xIn+res.item.wIn/2; const cy=origRel.yIn+res.item.hIn/2;
+    copy.corner="NW"; copy.xIn=cx; copy.yIn=cy;
     res.room.items.push(copy);
     setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
   }
@@ -352,20 +360,20 @@ function buildFloorToggles(){
     cb.addEventListener("change",()=>{cb.checked?state.visibleFloors.add(floor.id):state.visibleFloors.delete(floor.id); updateFloorSummary(); render(); saveApp();});
     const nameBox=document.createElement("input"); nameBox.type="text"; nameBox.value=floor.name;
     nameBox.dataset.floorId=floor.id;
-    const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.textContent="🗑";
+    const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.innerHTML="&#128465;";
     del.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); deleteFloor(floor.id);});
     const iconWrap=document.createElement("div"); iconWrap.className="row"; iconWrap.style.gap="8px";
     const up=document.createElement("button");
     up.type="button";
     up.className="btn icon";
     up.title="Move floor up";
-    up.textContent="▲";
+    up.innerHTML="&#9650;";
     up.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveFloor(floor.id,-1);});
     const dn=document.createElement("button");
     dn.type="button";
     dn.className="btn icon";
     dn.title="Move floor down";
-    dn.textContent="▼";
+    dn.innerHTML="&#9660;";
     dn.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveFloor(floor.id, 1);});
     iconWrap.appendChild(up);
     iconWrap.appendChild(dn);
@@ -395,8 +403,8 @@ function buildTypeToggles(){
     const txt=document.createElement("div"); txt.innerHTML=`<div style="font-weight:700;">${escapeXml(t)}</div>`;
     left.appendChild(cb); left.appendChild(sw); left.appendChild(txt);
     const right=document.createElement("div"); right.className="row"; right.style.gap="6px";
-    const up=document.createElement("button"); up.type="button"; up.className="btn icon"; up.title="Move up"; up.textContent="▲";
-    const dn=document.createElement("button"); dn.type="button"; dn.className="btn icon"; dn.title="Move down"; dn.textContent="▼";
+    const up=document.createElement("button"); up.type="button"; up.className="btn icon"; up.title="Move up"; up.innerHTML="&#9650;";
+    const dn=document.createElement("button"); dn.type="button"; dn.className="btn icon"; dn.title="Move down"; dn.innerHTML="&#9660;";
     up.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveType(t, 1);});
     dn.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveType(t,-1);});
     right.appendChild(up); right.appendChild(dn);
@@ -435,23 +443,71 @@ function renderCounts(){
 
 function cssId(s){ return s.replace(/[^a-zA-Z0-9_]/g,"_"); }
 
+function deleteType(type){
+  if(type==="Room"){ alert("Cannot delete the Room type."); return; }
+  const count=HOUSE.floors.reduce((acc,f)=>acc+f.rooms.reduce((a,r)=>a+r.items.filter(it=>it.type===type).length,0),0);
+  if(!confirm(`Delete type "${type}"?\n\nThis will permanently remove ${count} item(s) of this type from all rooms. This cannot be undone.`)) return;
+  for(const f of HOUSE.floors){ for(const r of f.rooms){ r.items=r.items.filter(it=>it.type!==type); } }
+  delete ACTIVE.types[type];
+  const idx=ACTIVE.typeOrder.indexOf(type); if(idx>=0) ACTIVE.typeOrder.splice(idx,1);
+  state.visibleTypes.delete(type); delete state.visibleLabels[type];
+  if(state.selected && state.selected.kind==="item"){ const res=findItem(state.selected.itemId); if(!res){ state.selected=null; state.selectedSnapshot=null; } }
+  buildAll(); render(); saveApp();
+}
+
 function buildConfigForm(){
   const wrap=document.getElementById("cfgForm"); wrap.innerHTML="";
   for(const t of ACTIVE.typeOrder){
     const st=ACTIVE.types[t];
     const id=cssId(t);
-    const block=document.createElement("div"); block.className="field"; block.style.padding="10px";
+    const block=document.createElement("div"); block.className="cfgBlock";
 
-    const head=document.createElement("div"); head.className="row"; head.style.justifyContent="flex-start"; head.style.gap="10px"; head.style.marginBottom="8px";
-    const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
-    const title=document.createElement("div"); title.style.fontWeight="700"; title.style.fontSize="13px"; title.textContent=t;
-    head.appendChild(sw); head.appendChild(title);
-    block.appendChild(head);
+    // ── Header ──────────────────────────────────────────────────────────────
+    const head=document.createElement("div"); head.className="cfgHead";
+
+    // Clickable swatch → overlaid hidden color picker
+    const swWrap=document.createElement("span"); swWrap.className="cfgSwatchWrap"; swWrap.title="Click to change swatch color";
+    const sw=document.createElement("span"); sw.className="swatch cfgSwatch"; sw.style.background=st.defaultLineColor;
+    const swPick=document.createElement("input"); swPick.type="color"; swPick.className="cfgSwatchPicker";
+    const hxSw=cssColorToHex(st.defaultLineColor); if(hxSw) swPick.value=hxSw;
+    swPick.addEventListener("input",()=>{
+      st.defaultLineColor=swPick.value.toLowerCase();
+      sw.style.background=st.defaultLineColor;
+      const lineInp=document.getElementById(`cfg_${id}_defaultLineColor`); if(lineInp) lineInp.value=st.defaultLineColor;
+      const linePick=document.getElementById(`cfg_${id}_defaultLineColor_picker`); if(linePick) linePick.value=st.defaultLineColor;
+      buildTypeToggles(); buildLabelToggles(); renderCounts(); saveApp();
+    });
+    swWrap.appendChild(sw); swWrap.appendChild(swPick);
+
+    const headLeft=document.createElement("div"); headLeft.className="row"; headLeft.style.gap="10px";
+    const titleEl=document.createElement("div"); titleEl.style.fontWeight="700"; titleEl.style.fontSize="13px"; titleEl.textContent=t;
+    headLeft.appendChild(swWrap); headLeft.appendChild(titleEl);
+
+    const headRight=document.createElement("div"); headRight.className="row"; headRight.style.gap="6px";
+    const arrow=document.createElement("span"); arrow.className="cfgArrow"; arrow.innerHTML="&#9654;";
+
+    if(t!=="Room"){
+      const delBtn=document.createElement("button"); delBtn.type="button"; delBtn.className="btn icon cfgDelBtn"; delBtn.title=`Delete type "${t}"`; delBtn.innerHTML="&#128465;";
+      delBtn.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); deleteType(t); });
+      headRight.appendChild(delBtn);
+    }
+    headRight.appendChild(arrow);
+    head.appendChild(headLeft); head.appendChild(headRight);
+
+    // ── Body (collapsed by default) ─────────────────────────────────────────
+    const body=document.createElement("div"); body.className="cfgBody"; body.style.display="none";
+
+    head.addEventListener("click",(ev)=>{
+      if(swWrap.contains(ev.target)) return;
+      const open=body.style.display!=="none";
+      body.style.display=open?"none":"block";
+      arrow.style.transform=open?"":"rotate(90deg)";
+    });
 
     if(t!=="Room"){
       const nm=document.createElement("div"); nm.className="field"; nm.style.marginBottom="8px";
       nm.innerHTML=`<label>Type Name</label><input id="cfg_${id}_name" value="${escapeXml(t)}" />`;
-      block.appendChild(nm);
+      body.appendChild(nm);
     }
 
     const grid=document.createElement("div"); grid.className="grid2";
@@ -483,16 +539,21 @@ function buildConfigForm(){
     fa.innerHTML=`<label>Default Fill Opacity (0..1)</label><input id="cfg_${id}_fillAlpha" type="number" step="0.01" value="${escapeXml(st.defaultFillAlpha ?? 1)}" />`;
     grid.appendChild(fa);
 
-    const dims=document.createElement("div"); dims.className="field"; dims.style.gridColumn="1/-1";
-    dims.innerHTML=`<label>Default dimensions for new items (in)</label>
-      <div class="grid3" style="margin-top:6px;">
-        <div class="field"><label>Width</label><input id="cfg_${id}_defW" type="number" step="0.5" value="${escapeXml(st.defaultWIn ?? 0)}" /></div>
-        <div class="field"><label>Length</label><input id="cfg_${id}_defH" type="number" step="0.5" value="${escapeXml(st.defaultHIn ?? 0)}" /></div>
-        <div class="field"><label>Height</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" /></div>
-      </div>`;
-    block.appendChild(grid);
-    block.appendChild(dims);
+    const defW=document.createElement("div"); defW.className="field";
+    defW.innerHTML=`<label>Default Width (in)</label><input id="cfg_${id}_defW" type="number" step="0.5" value="${escapeXml(st.defaultWIn ?? 0)}" />`;
+    grid.appendChild(defW);
 
+    const defH=document.createElement("div"); defH.className="field";
+    defH.innerHTML=`<label>Default Length (in)</label><input id="cfg_${id}_defH" type="number" step="0.5" value="${escapeXml(st.defaultHIn ?? 0)}" />`;
+    grid.appendChild(defH);
+
+    const defZ=document.createElement("div"); defZ.className="field";
+    defZ.innerHTML=`<label>Default Height (in)</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" />`;
+    grid.appendChild(defZ);
+
+    body.appendChild(grid);
+    block.appendChild(head);
+    block.appendChild(body);
     wrap.appendChild(block);
   }
 }
@@ -911,6 +972,15 @@ function wire(){
   document.getElementById("selSave").addEventListener("click",(e)=>{e.preventDefault(); saveSelectedForm();});
   document.getElementById("selDuplicate").addEventListener("click",(e)=>{e.preventDefault(); duplicateSelected();});
   document.getElementById("selDelete").addEventListener("click",(e)=>{e.preventDefault(); deleteSelected();});
+
+  // Keyboard shortcuts: Delete = delete selected, Insert = duplicate selected
+  document.addEventListener("keydown",(ev)=>{
+    const tag=(ev.target?.tagName||"").toLowerCase();
+    const editable=tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable;
+    if(editable) return;
+    if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); }
+    else if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); }
+  });
 
   document.getElementById("newFloor").addEventListener("change",()=>populateNewItemSelectors());
   document.getElementById("newType").addEventListener("change",()=>populateNewItemSelectors());
