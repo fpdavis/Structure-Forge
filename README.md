@@ -90,9 +90,3 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - Option: user-defined number of sides from 3 (triangle) to 360 (circle)
   - Editing handles and hit-testing for arbitrary polygons
   - Export implications for non-rectangular shapes
-
----
-
-## Notes
-
-- JSON format changes should be staged carefully (schema version + migration path) to avoid breaking existing saved projects once the tool is in use.
