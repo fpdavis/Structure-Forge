@@ -59,12 +59,12 @@ Notes
   <aside class="left">
     <div class="topbar">
       <div class="line">
-        <button class="btn icon" id="navToggle" type="button" title="Collapse/expand left panel">☰</button>
+        <button class="btn icon" id="navToggle" type="button" title="Collapse/expand left panel">&#9776;</button>
         <div class="field" style="margin:0;flex:1"><label></label><select id="structureSelect"></select></div>
         <div class="row" style="justify-content:flex-end;gap:8px">
-          <button class="btn icon" id="structureNew" type="button" title="New structure">➕</button>
-          <button class="btn icon" id="structureDelete" type="button" title="Delete structure">🗑</button>
-          <button class="btn icon" id="storageReset" type="button" title="Reset stored data">↺</button>
+          <button class="btn icon" id="structureNew" type="button" title="New structure">&#10133;</button>
+          <button class="btn icon" id="structureDelete" type="button" title="Delete structure">&#128465;</button>
+          <button class="btn icon" id="storageReset" type="button" title="Reset stored data">&#8634;</button>
         </div>
       </div>
     </div>
@@ -114,7 +114,7 @@ Notes
           <button class="btn" id="showAllFloors" type="button">Show all floors</button>
           <button class="btn" id="hideAllFloors" type="button">Hide all floors</button>
           <button class="btn" id="addFloor" type="button">Add floor</button>
-          <button class="btn" id="saveFloorNames" type="button">Save floor names</button>
+          <button class="btn" id="saveFloorNames" type="button">Save</button>
         </div>
         <div id="floorToggles" class="col"></div>
       </div>
@@ -183,7 +183,7 @@ Notes
       </div>
     </details>
 
-    <div class="hint" style="margin-top:12px;">Corner notation: <strong>NW/NE/SW/SE</strong> indicates which corner the given (x,y) refers to.</div>
+    <div class="hint" style="margin-top:12px;"><strong>NW/NE/SW/SE</strong> (North-West, North-East, South-West, South-East) indicates the primary corner the given (x,y) refers to. Left mouse button selects objects. Select corner and hold mouse button to resize object. Select object and hold mouse button to move object. Scroll wheel zooms. Hold right mouse button to pan. Add New Item object container is pre-populated/defaulted by mouse selection. Clicking on a color swatch next to a color input field will allow you to change the color via a color picker.</div>
 	<div class="line2">
       <div class="subtle" id="storageStatus">Storage: not saved yet</div>
 	  <div class="hint" style="margin-top:12px;">ExF Productions' Structure Forge</div>

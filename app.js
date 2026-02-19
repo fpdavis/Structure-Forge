@@ -1,25 +1,10 @@
 
-const STORAGE_KEY="house-layout-viewer:v11";
+const STORAGE_KEY="house-layout-viewer:v5";
 let APP=null, ACTIVE=null, HOUSE=null;
 
-
-// --- Exporter registry (exporters/export_*.js register via registerExporter) ---
-const EXPORTERS=new Map(); // id -> exporter
-
-window.registerExporter = function registerExporter(exp){
-  if(!exp || typeof exp.id!=="string" || !exp.id.trim()) throw new Error("Exporter must have an id");
-  if(typeof exp.name!=="string" || !exp.name.trim()) exp.name=exp.id;
-  if(typeof exp.export!=="function") throw new Error("Exporter must implement export(ctx, opts)");
-  EXPORTERS.set(exp.id, exp);
-  // if UI already exists, refresh formats
-  try{ populateExportFormats(); } catch {}
-};
-
-function listExporters(){ return Array.from(EXPORTERS.values()); }
-function getExporter(id){ return EXPORTERS.get(id) || null; }
-
-const state={ ppi:3, visibleFloors:new Set(), visibleTypes:new Set(), visibleLabels:{}, selected:null, selectedSnapshot:null, pendingFloorNames:new Map() };
-const drag={active:false, kind:null, roomId:null, itemId:null, svg:null, startPt:null, startNW:null, raf:false};
+const state={ ppi:3, visibleFloors:new Set(), visibleTypes:new Set(), visibleLabels:{}, selected:null, selectedSnapshot:null, view:{scale:1,tx:0,ty:0} };
+const drag={active:false, kind:null, roomId:null, itemId:null, svg:null, startPt:null, startNW:null, startRect:null, fixedPt:null, raf:false};
+const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
 
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const inToPx=(inch)=>inch*state.ppi;
@@ -35,7 +20,35 @@ function hsvToRgb(h,s,v){ let r,g,b; let i=Math.floor(h*6); let f=h*6-i; let p=v
   switch(i%6){case 0:r=v,g=t,b=p;break;case 1:r=q,g=v,b=p;break;case 2:r=p,g=v,b=t;break;case 3:r=p,g=q,b=v;break;case 4:r=t,g=p,b=v;break;case 5:r=v,g=p,b=q;break;}
   return {r:Math.round(r*255),g:Math.round(g*255),b:Math.round(b*255)}; }
 function rgbToHex({r,g,b}){ return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`; }
-function genDefaultStyle(idx){ const hue=(idx*0.17)%1; const line=rgbToHex(hsvToRgb(hue,0.55,0.95)); return {strokeWidth:3, defaultLineColor:line, defaultCornerColor:line, defaultFillColor:"rgba(255,255,255,0.05)"}; }
+
+function cssColorToHex(v){
+  if(!v) return null;
+  v=String(v).trim();
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
+  // try browser parsing for css color names
+  const s=new Option().style;
+  s.color=v;
+  if(!s.color) return null;
+  // computed rgb(...) form
+  const tmp=document.createElement("div");
+  tmp.style.color=v;
+  document.body.appendChild(tmp);
+  const cs=getComputedStyle(tmp).color;
+  document.body.removeChild(tmp);
+  const m=cs.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if(!m) return null;
+  const r=parseInt(m[1],10), g=parseInt(m[2],10), b=parseInt(m[3],10);
+  return rgbToHex({r,g,b}).toLowerCase();
+}
+function isValidCssColorToken(v){
+  if(!v) return false;
+  v=String(v).trim();
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) return true;
+  if(/^[a-zA-Z]+$/.test(v) && cssColorToHex(v)) return true;
+  return false;
+}
+function genDefaultStyle(idx){ const hue=(idx*0.17)%1; const line=rgbToHex(hsvToRgb(hue,0.55,0.95));
+  return {strokeWidth:3, defaultLineColor:line, defaultCornerColor:line, defaultFillColor:"#ffffff", defaultFillAlpha:0.05, defaultWIn:48, defaultHIn:48, defaultHeightIn:96}; };
 
 function normalizeRectAbs(obj){ const {xIn,yIn,wIn,hIn,corner}=obj; let x=xIn,y=yIn;
   if(corner==="NE") x=xIn-wIn; else if(corner==="SW") y=yIn-hIn; else if(corner==="SE"){x=xIn-wIn;y=yIn-hIn;}
@@ -59,6 +72,7 @@ function markerAbsPos(objNW, obj, corner){
   return {xIn:cx,yIn:cy};
 }
 
+function oppositeCorner(c){ return c==="NW"?"SE":c==="SE"?"NW":c==="NE"?"SW":"NE"; }
 function setStatus(msg){ const el=document.getElementById("storageStatus"); if(el) el.textContent=msg; }
 function saveApp(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(APP)); setStatus("Storage: saved"); } catch { setStatus("Storage: failed to save"); } }
 function loadApp(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return null; const parsed=JSON.parse(raw);
@@ -66,68 +80,30 @@ function loadApp(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(!raw) r
 
 function applyDefaultsToObj(o){
   const st=ACTIVE.types[o.type] || (ACTIVE.types[o.type]=genDefaultStyle(Object.keys(ACTIVE.types).length));
-  // style defaults
   if(o.lineColor==null) o.lineColor=st.defaultLineColor;
   if(o.cornerColor==null) o.cornerColor=st.defaultCornerColor;
   if(o.fillColor==null) o.fillColor=st.defaultFillColor;
+  if(o.fillAlpha==null) o.fillAlpha=st.defaultFillAlpha;
   if(!Number.isFinite(o.strokeWidth)) o.strokeWidth=st.strokeWidth;
-
-  // dimension defaults (inches): width=wIn, length=hIn, height=heightIn
-  const fallback = defaultDimsForType(o.type);
-  if(!Number.isFinite(o.wIn)) o.wIn = Number.isFinite(st.defaultWIn) ? st.defaultWIn : fallback.wIn;
-  if(!Number.isFinite(o.hIn)) o.hIn = Number.isFinite(st.defaultHIn) ? st.defaultHIn : fallback.hIn;
-  if(!Number.isFinite(o.heightIn)) o.heightIn = Number.isFinite(st.defaultHeightIn) ? st.defaultHeightIn : fallback.heightIn;
 }
 function ensureTypeExists(type){
   if(ACTIVE.types[type]) return;
   const idx=Object.keys(ACTIVE.types).length;
   ACTIVE.types[type]=genDefaultStyle(idx);
-  // dimension defaults
-  const d=defaultDimsForType(type);
-  ACTIVE.types[type].defaultWIn=d.wIn;
-  ACTIVE.types[type].defaultHIn=d.hIn;
-  ACTIVE.types[type].defaultHeightIn=d.heightIn;
-
   if(!ACTIVE.typeOrder.includes(type)) ACTIVE.typeOrder.push(type);
   state.visibleTypes.add(type);
   state.visibleLabels[type]=false;
 }
 
-function defaultDimsForType(type){
-  // Conservative, practical defaults. Users can override per-type in Configuration.
-  switch(type){
-    case "Room": return {wIn:144, hIn:120, heightIn:96};
-    case "Door": return {wIn:36, hIn:6, heightIn:80};
-    case "Window": return {wIn:48, hIn:6, heightIn:48};
-    case "Opening": return {wIn:36, hIn:6, heightIn:80};
-    case "Outlet": return {wIn:6, hIn:6, heightIn:18};
-    case "Light": return {wIn:8, hIn:8, heightIn:96};
-    default: return {wIn:24, hIn:24, heightIn:48};
-  }
-}
-
-function ensureTypeDefaults(type){
-  ensureTypeExists(type);
-  const st=ACTIVE.types[type];
-  const d=defaultDimsForType(type);
-  if(!Number.isFinite(st.defaultWIn)) st.defaultWIn=d.wIn;
-  if(!Number.isFinite(st.defaultHIn)) st.defaultHIn=d.hIn;
-  if(!Number.isFinite(st.defaultHeightIn)) st.defaultHeightIn=d.heightIn;
-}
-
-function ensureAllTypeDefaults(){
-  for(const t of ACTIVE.typeOrder) ensureTypeDefaults(t);
-}
-
 function seedApp(){
   const id=guid();
   const types={
-    "Room":{strokeWidth:6,defaultLineColor:"#cfd6e6",defaultCornerColor:"#55d6be",defaultFillColor:"rgba(255,255,255,0.03)",defaultWIn:144,defaultHIn:120,defaultHeightIn:96},
-    "Door":{strokeWidth:5,defaultLineColor:"#ffcd6a",defaultCornerColor:"#ffcd6a",defaultFillColor:"rgba(255,205,106,0.05)",defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
-    "Window":{strokeWidth:4,defaultLineColor:"#6aa6ff",defaultCornerColor:"#6aa6ff",defaultFillColor:"rgba(106,166,255,0.05)",defaultWIn:48,defaultHIn:6,defaultHeightIn:48},
-    "Opening":{strokeWidth:4,defaultLineColor:"#c46aff",defaultCornerColor:"#c46aff",defaultFillColor:"rgba(196,106,255,0.05)",defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
-    "Outlet":{strokeWidth:3,defaultLineColor:"#6aff9f",defaultCornerColor:"#6aff9f",defaultFillColor:"rgba(106,255,159,0.05)",defaultWIn:6,defaultHIn:6,defaultHeightIn:18},
-    "Light":{strokeWidth:3,defaultLineColor:"#ffffff",defaultCornerColor:"#ffffff",defaultFillColor:"rgba(255,255,255,0.06)",defaultWIn:8,defaultHIn:8,defaultHeightIn:96}
+    "Room":{strokeWidth:6,defaultLineColor:"#cfd6e6",defaultCornerColor:"#55d6be",defaultFillColor:"#ffffff",defaultFillAlpha:0.03,defaultWIn:180,defaultHIn:140,defaultHeightIn:96},
+    "Door":{strokeWidth:5,defaultLineColor:"#ffcd6a",defaultCornerColor:"#ffcd6a",defaultFillColor:"#ffcd6a",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
+    "Window":{strokeWidth:4,defaultLineColor:"#6aa6ff",defaultCornerColor:"#6aa6ff",defaultFillColor:"#6aa6ff",defaultFillAlpha:0.05,defaultWIn:48,defaultHIn:6,defaultHeightIn:48},
+    "Opening":{strokeWidth:4,defaultLineColor:"#c46aff",defaultCornerColor:"#c46aff",defaultFillColor:"#c46aff",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
+    "Outlet":{strokeWidth:3,defaultLineColor:"#6aff9f",defaultCornerColor:"#6aff9f",defaultFillColor:"#6aff9f",defaultFillAlpha:0.05,defaultWIn:6,defaultHIn:6,defaultHeightIn:18},
+    "Light":{strokeWidth:3,defaultLineColor:"#ffffff",defaultCornerColor:"#ffffff",defaultFillColor:"#ffffff",defaultFillAlpha:0.06,defaultWIn:8,defaultHIn:8,defaultHeightIn:96}
   };
   const typeOrder=["Room","Door","Window","Opening","Outlet","Light"];
   const house={floors:[
@@ -150,9 +126,9 @@ function seedApp(){
     ]}
   ]};
   // default colors
-  for(const f of house.floors){ for(const r of f.rooms){ r.lineColor=types.Room.defaultLineColor; r.cornerColor=types.Room.defaultCornerColor; r.fillColor=types.Room.defaultFillColor;
+  for(const f of house.floors){ for(const r of f.rooms){ r.lineColor=types.Room.defaultLineColor; r.cornerColor=types.Room.defaultCornerColor; r.fillColor=types.Room.defaultFillColor; r.fillAlpha=types.Room.defaultFillAlpha;
       for(const it of r.items){ if(!types[it.type]) types[it.type]=genDefaultStyle(Object.keys(types).length);
-        const st=types[it.type]; it.lineColor=st.defaultLineColor; it.cornerColor=st.defaultCornerColor; it.fillColor=st.defaultFillColor; } } }
+        const st=types[it.type]; it.lineColor=st.defaultLineColor; it.cornerColor=st.defaultCornerColor; it.fillColor=st.defaultFillColor; it.fillAlpha=st.defaultFillAlpha; } } }
   return {version:5, activeId:id, structures:[{id,name:"My House",house,types,typeOrder}]};
 }
 
@@ -161,13 +137,11 @@ function setActiveStructure(id){
   ACTIVE=APP.structures.find(s=>s.id===id) || APP.structures[0];
   APP.activeId=ACTIVE.id;
   HOUSE=ACTIVE.house;
-  ensureAllTypeDefaults();
 
   if(!ACTIVE.types) ACTIVE.types={"Room":genDefaultStyle(0)};
   if(!ACTIVE.typeOrder) ACTIVE.typeOrder=["Room",...Object.keys(ACTIVE.types).filter(t=>t!=="Room")];
   if(!ACTIVE.typeOrder.includes("Room")) ACTIVE.typeOrder.unshift("Room");
   for(const t of ACTIVE.typeOrder) ensureTypeExists(t);
-  ensureAllTypeDefaults();
 
   state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id));
   state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
@@ -175,7 +149,6 @@ function setActiveStructure(id){
   state.selected=null; state.selectedSnapshot=null;
 
   buildAll(); render(); saveApp();
-  populateExportFormats();
 }
 
 function buildStructureUI(){
@@ -204,9 +177,10 @@ const ROOM_FIELDS=[
   {key:"wIn",label:"Width (in)",kind:"number"},
   {key:"hIn",label:"Length (in)",kind:"number"},
   {key:"heightIn",label:"Height (in)",kind:"number"},
-  {key:"cornerColor",label:"Corner Color",kind:"text"},
-  {key:"lineColor",label:"Line Color",kind:"text"},
-  {key:"fillColor",label:"Fill Color",kind:"text"}
+  {key:"cornerColor",label:"Corner Color",kind:"color"},
+  {key:"lineColor",label:"Line Color",kind:"color"},
+  {key:"fillColor",label:"Fill Color",kind:"color"},
+  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.01"}
 ];
 const ITEM_FIELDS=[
   {key:"type",label:"Type",kind:"selectDynamic"},
@@ -218,9 +192,10 @@ const ITEM_FIELDS=[
   {key:"wIn",label:"Width (in)",kind:"number"},
   {key:"hIn",label:"Length (in)",kind:"number"},
   {key:"heightIn",label:"Height (in)",kind:"number"},
-  {key:"cornerColor",label:"Corner Color",kind:"text"},
-  {key:"lineColor",label:"Line Color",kind:"text"},
-  {key:"fillColor",label:"Fill Color",kind:"text"}
+  {key:"cornerColor",label:"Corner Color",kind:"color"},
+  {key:"lineColor",label:"Line Color",kind:"color"},
+  {key:"fillColor",label:"Fill Color",kind:"color"},
+  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.01"}
 ];
 
 function buildSelectedForm(){
@@ -242,6 +217,20 @@ function buildSelectedForm(){
   for(const f of fields){
     const box=document.createElement("div"); box.className="field";
     const lab=document.createElement("label"); lab.textContent=f.label;
+    if(f.kind==="color"){
+      const v=obj?.[f.key]??"";
+      const row=document.createElement("div"); row.className="colorRow";
+      const txt=document.createElement("input"); txt.type="text"; txt.id=`sel_${f.key}`; txt.placeholder="#rrggbb or css name";
+      const pick=document.createElement("input"); pick.type="color"; pick.id=`sel_${f.key}_picker`;
+      txt.value=v;
+      const hx=cssColorToHex(v); if(hx) pick.value=hx;
+      pick.addEventListener("input",()=>{txt.value=pick.value.toLowerCase();});
+      txt.addEventListener("input",()=>{ const h=cssColorToHex(txt.value); if(h) pick.value=h; });
+      row.appendChild(txt); row.appendChild(pick);
+      box.appendChild(lab); box.appendChild(row);
+      wrap.appendChild(box);
+      continue;
+    }
     let input;
     if(f.kind==="textarea"){ input=document.createElement("textarea"); }
     else if(f.kind==="select"){
@@ -254,7 +243,10 @@ function buildSelectedForm(){
     }
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
-    if(["xIn","yIn","wIn","hIn","heightIn"].includes(f.key) && v!=="" && Number.isFinite(+v)) v=String(roundHalf(+v));
+    if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha"].includes(f.key) && v!=="" && Number.isFinite(+v)){
+      const step=(f.step?parseFloat(f.step):0.5);
+      v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
+    }
     input.value=v;
     box.appendChild(lab); box.appendChild(input);
     wrap.appendChild(box);
@@ -275,12 +267,16 @@ function saveSelectedForm(){
   if(state.selected.kind==="room"){
     const res=findRoom(state.selected.roomId); if(!res) return; const room=res.room;
     for(const f of ROOM_FIELDS){ const v=document.getElementById(`sel_${f.key}`)?.value; if(v==null) continue;
-      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) room[f.key]=num; } else { room[f.key]=v; } }
+      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) room[f.key]=num; }
+      else if(f.kind==="color"){ if(isValidCssColorToken(v)) room[f.key]=v.trim(); }
+      else { room[f.key]=v; } }
     applyDefaultsToObj(room);
   } else {
     const res=findItem(state.selected.itemId); if(!res) return; const it=res.item;
     for(const f of ITEM_FIELDS){ const v=document.getElementById(`sel_${f.key}`)?.value; if(v==null) continue;
-      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) it[f.key]=num; } else { it[f.key]=v; } }
+      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) it[f.key]=num; }
+      else if(f.kind==="color"){ if(isValidCssColorToken(v)) it[f.key]=v.trim(); }
+      else { it[f.key]=v; } }
     ensureTypeExists(it.type);
     applyDefaultsToObj(it);
   }
@@ -354,18 +350,10 @@ function buildFloorToggles(){
     const row=document.createElement("div"); row.className="floorRow";
     const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=state.visibleFloors.has(floor.id);
     cb.addEventListener("change",()=>{cb.checked?state.visibleFloors.add(floor.id):state.visibleFloors.delete(floor.id); updateFloorSummary(); render(); saveApp();});
-
-    const nameBox=document.createElement("input"); nameBox.type="text";
-    nameBox.value = state.pendingFloorNames.has(floor.id) ? state.pendingFloorNames.get(floor.id) : floor.name;
-    nameBox.addEventListener("input",()=>{
-      state.pendingFloorNames.set(floor.id, nameBox.value);
-      nameBox.style.outline="2px solid rgba(106,166,255,.45)";
-      nameBox.style.outlineOffset="1px";
-    });
-
+    const nameBox=document.createElement("input"); nameBox.type="text"; nameBox.value=floor.name;
+    nameBox.dataset.floorId=floor.id;
     const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.textContent="🗑";
     del.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); deleteFloor(floor.id);});
-
     const iconWrap=document.createElement("div"); iconWrap.className="row"; iconWrap.style.gap="8px";
     const up=document.createElement("button");
     up.type="button";
@@ -382,22 +370,10 @@ function buildFloorToggles(){
     iconWrap.appendChild(up);
     iconWrap.appendChild(dn);
     iconWrap.appendChild(del);
-
     row.appendChild(cb); row.appendChild(nameBox); row.appendChild(iconWrap); wrap.appendChild(row);
   }
   updateFloorSummary();
 }
-function saveAllFloorNames(){
-  if(state.pendingFloorNames.size===0){ return; }
-  for(const floor of HOUSE.floors){
-    if(!state.pendingFloorNames.has(floor.id)) continue;
-    const v=(state.pendingFloorNames.get(floor.id)||"").trim();
-    floor.name = v ? v : "(unnamed floor)";
-  }
-  state.pendingFloorNames.clear();
-  buildAll(); render(); saveApp();
-}
-
 function isTypeVisible(t){ return t==="Room"?true:state.visibleTypes.has(t); }
 function isLabelVisible(t){ return !!state.visibleLabels[t]; }
 function moveType(type,delta){
@@ -458,29 +434,65 @@ function renderCounts(){
 }
 
 function cssId(s){ return s.replace(/[^a-zA-Z0-9_]/g,"_"); }
+
 function buildConfigForm(){
   const wrap=document.getElementById("cfgForm"); wrap.innerHTML="";
   for(const t of ACTIVE.typeOrder){
     const st=ACTIVE.types[t];
     const id=cssId(t);
     const block=document.createElement("div"); block.className="field"; block.style.padding="10px";
-    block.innerHTML=`
-      <div class="row" style="justify-content:flex-start;gap:10px;margin-bottom:8px;">
-        <span class="swatch" style="background:${escapeXml(st.defaultLineColor)}"></span>
-        <div style="font-weight:700;font-size:13px;">${escapeXml(t)}</div>
-      </div>
-      ${t==="Room" ? "" : `<div class="field" style="margin-bottom:8px;"><label>Type Name</label><input id="cfg_${id}_name" value="${escapeXml(t)}" /></div>`}
-      <div class="grid2">
-        <div class="field"><label>Default Line Color</label><input id="cfg_${id}_line" value="${escapeXml(st.defaultLineColor)}" /></div>
-        <div class="field"><label>Stroke width (px)</label><input id="cfg_${id}_width" type="number" step="1" value="${escapeXml(st.strokeWidth)}" /></div>
-        <div class="field"><label>Default Corner Color</label><input id="cfg_${id}_corner" value="${escapeXml(st.defaultCornerColor)}" /></div>
-        <div class="field"><label>Default Fill Color</label><input id="cfg_${id}_fill" value="${escapeXml(st.defaultFillColor)}" /></div>
-      </div>
-      <div class="grid3" style="margin-top:8px;">
-        <div class="field"><label>Default Width (in)</label><input id="cfg_${id}_dw" type="number" step="0.5" value="${escapeXml(st.defaultWIn)}" /></div>
-        <div class="field"><label>Default Length (in)</label><input id="cfg_${id}_dl" type="number" step="0.5" value="${escapeXml(st.defaultHIn)}" /></div>
-        <div class="field"><label>Default Height (in)</label><input id="cfg_${id}_dh" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn)}" /></div>
+
+    const head=document.createElement("div"); head.className="row"; head.style.justifyContent="flex-start"; head.style.gap="10px"; head.style.marginBottom="8px";
+    const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
+    const title=document.createElement("div"); title.style.fontWeight="700"; title.style.fontSize="13px"; title.textContent=t;
+    head.appendChild(sw); head.appendChild(title);
+    block.appendChild(head);
+
+    if(t!=="Room"){
+      const nm=document.createElement("div"); nm.className="field"; nm.style.marginBottom="8px";
+      nm.innerHTML=`<label>Type Name</label><input id="cfg_${id}_name" value="${escapeXml(t)}" />`;
+      block.appendChild(nm);
+    }
+
+    const grid=document.createElement("div"); grid.className="grid2";
+
+    const makeColor=(label, key)=>{
+      const f=document.createElement("div"); f.className="field";
+      const lab=document.createElement("label"); lab.textContent=label;
+      const row=document.createElement("div"); row.className="colorRow";
+      const txt=document.createElement("input"); txt.type="text"; txt.id=`cfg_${id}_${key}`; txt.placeholder="#rrggbb or css name";
+      const pick=document.createElement("input"); pick.type="color"; pick.id=`cfg_${id}_${key}_picker`;
+      txt.value=st[key]; const hx=cssColorToHex(st[key]); if(hx) pick.value=hx;
+      pick.addEventListener("input",()=>{txt.value=pick.value.toLowerCase();});
+      txt.addEventListener("input",()=>{const h=cssColorToHex(txt.value); if(h) pick.value=h;});
+      row.appendChild(txt); row.appendChild(pick);
+      f.appendChild(lab); f.appendChild(row);
+      return f;
+    };
+
+    grid.appendChild(makeColor("Default Line Color","defaultLineColor"));
+
+    const swf=document.createElement("div"); swf.className="field";
+    swf.innerHTML=`<label>Stroke width (px)</label><input id="cfg_${id}_width" type="number" step="1" value="${escapeXml(st.strokeWidth)}" />`;
+    grid.appendChild(swf);
+
+    grid.appendChild(makeColor("Default Corner Color","defaultCornerColor"));
+    grid.appendChild(makeColor("Default Fill Color","defaultFillColor"));
+
+    const fa=document.createElement("div"); fa.className="field";
+    fa.innerHTML=`<label>Default Fill Opacity (0..1)</label><input id="cfg_${id}_fillAlpha" type="number" step="0.01" value="${escapeXml(st.defaultFillAlpha ?? 1)}" />`;
+    grid.appendChild(fa);
+
+    const dims=document.createElement("div"); dims.className="field"; dims.style.gridColumn="1/-1";
+    dims.innerHTML=`<label>Default dimensions for new items (in)</label>
+      <div class="grid3" style="margin-top:6px;">
+        <div class="field"><label>Width</label><input id="cfg_${id}_defW" type="number" step="0.5" value="${escapeXml(st.defaultWIn ?? 0)}" /></div>
+        <div class="field"><label>Length</label><input id="cfg_${id}_defH" type="number" step="0.5" value="${escapeXml(st.defaultHIn ?? 0)}" /></div>
+        <div class="field"><label>Height</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" /></div>
       </div>`;
+    block.appendChild(grid);
+    block.appendChild(dims);
+
     wrap.appendChild(block);
   }
 }
@@ -537,21 +549,25 @@ function saveConfig(){
   // Apply style edits
   for(const t of ACTIVE.typeOrder){
     const id=cssId(t);
-    const line=document.getElementById(`cfg_${id}_line`)?.value;
-    const width=parseInt(document.getElementById(`cfg_${id}_width`)?.value,10);
-    const corner=document.getElementById(`cfg_${id}_corner`)?.value;
-    const fill=document.getElementById(`cfg_${id}_fill`)?.value;
-    const dw=parseFloat(document.getElementById(`cfg_${id}_dw`)?.value);
-    const dl=parseFloat(document.getElementById(`cfg_${id}_dl`)?.value);
-    const dh=parseFloat(document.getElementById(`cfg_${id}_dh`)?.value);
     const st=ACTIVE.types[t] || (ACTIVE.types[t]=genDefaultStyle(Object.keys(ACTIVE.types).length));
-    if(typeof line==="string" && line) st.defaultLineColor=line;
+
+    const line=document.getElementById(`cfg_${id}_defaultLineColor`)?.value;
+    const corner=document.getElementById(`cfg_${id}_defaultCornerColor`)?.value;
+    const fill=document.getElementById(`cfg_${id}_defaultFillColor`)?.value;
+    const width=parseInt(document.getElementById(`cfg_${id}_width`)?.value,10);
+    const fillAlpha=parseFloat(document.getElementById(`cfg_${id}_fillAlpha`)?.value);
+    const defW=parseFloat(document.getElementById(`cfg_${id}_defW`)?.value);
+    const defH=parseFloat(document.getElementById(`cfg_${id}_defH`)?.value);
+    const defZ=parseFloat(document.getElementById(`cfg_${id}_defZ`)?.value);
+
+    if(typeof line==="string" && isValidCssColorToken(line)) st.defaultLineColor=line.trim();
+    if(typeof corner==="string" && isValidCssColorToken(corner)) st.defaultCornerColor=corner.trim();
+    if(typeof fill==="string" && isValidCssColorToken(fill)) st.defaultFillColor=fill.trim();
     if(Number.isFinite(width) && width>0) st.strokeWidth=width;
-    if(typeof corner==="string" && corner) st.defaultCornerColor=corner;
-    if(typeof fill==="string" && fill) st.defaultFillColor=fill;
-    if(Number.isFinite(dw) && dw>0) st.defaultWIn=dw;
-    if(Number.isFinite(dl) && dl>0) st.defaultHIn=dl;
-    if(Number.isFinite(dh) && dh>0) st.defaultHeightIn=dh;
+    if(Number.isFinite(fillAlpha)) st.defaultFillAlpha=clamp(fillAlpha,0,1);
+    if(Number.isFinite(defW)) st.defaultWIn=defW;
+    if(Number.isFinite(defH)) st.defaultHIn=defH;
+    if(Number.isFinite(defZ)) st.defaultHeightIn=defZ;
   }
 
   buildAll(); render(); saveApp();
@@ -563,10 +579,6 @@ function addType(){
   if(ACTIVE.typeOrder.includes(name)){ alert("That type already exists."); return; }
   const idx=Object.keys(ACTIVE.types).length;
   ACTIVE.types[name]=genDefaultStyle(idx);
-  const d=defaultDimsForType(name);
-  ACTIVE.types[name].defaultWIn=d.wIn;
-  ACTIVE.types[name].defaultHIn=d.hIn;
-  ACTIVE.types[name].defaultHeightIn=d.heightIn;
   ACTIVE.typeOrder.push(name);
   state.visibleTypes.add(name);
   state.visibleLabels[name]=false;
@@ -636,7 +648,8 @@ function addNew(){
   ensureTypeExists(type);
   if(type==="Room"){
     const floor=findFloor(floorId); if(!floor) return;
-    const r={id:guid(),type:"Room",floorId:floor.id,name:"Room",description:"",corner:"NW",xIn:20,yIn:20,wIn:NaN,hIn:NaN,heightIn:NaN,items:[]};
+    const st=ACTIVE.types["Room"]||genDefaultStyle(0);
+    const r={id:guid(),type:"Room",floorId:floor.id,name:"Room",description:"",corner:"NW",xIn:20,yIn:20,wIn:st.defaultWIn??144,hIn:st.defaultHIn??120,heightIn:st.defaultHeightIn??96,items:[]};
     applyDefaultsToObj(r);
     floor.rooms.push(r);
     state.visibleFloors.add(floor.id);
@@ -650,42 +663,43 @@ function addNew(){
   if(!targetRoomId) targetRoomId=roomId;
   if(!targetRoomId){ alert("Select a room first (or choose a room)."); return; }
   const res=findRoom(targetRoomId); if(!res){ alert("Room not found."); return; }
-  const it={id:guid(),type,roomId:res.room.id,name:type,description:"",corner:"NW",xIn:12,yIn:12,wIn:NaN,hIn:NaN,heightIn:NaN};
+  const st=ACTIVE.types[type]||genDefaultStyle(Object.keys(ACTIVE.types).length);
+  const it={id:guid(),type,roomId:res.room.id,name:type,description:"",corner:"NW",xIn:12,yIn:12,wIn:st.defaultWIn??24,hIn:st.defaultHIn??24,heightIn:st.defaultHeightIn??48};
   applyDefaultsToObj(it);
   res.room.items.push(it);
   setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:it.id});
   buildAll(); render(); saveApp();
 }
 
-function populateExportFormats(){
+// --- Exporters ---
+const EXPORTERS=[];
+window.registerExporter=function(exp){
+  if(!exp || !exp.id) return;
+  const idx=EXPORTERS.findIndex(e=>e.id===exp.id);
+  if(idx>=0) EXPORTERS[idx]=exp; else EXPORTERS.push(exp);
+  refreshExportFormatSelect();
+};
+function refreshExportFormatSelect(){
   const sel=document.getElementById("exportFormat");
   if(!sel) return;
-  const keep=sel.value;
+  const cur=sel.value;
   sel.innerHTML="";
-  const exporters=listExporters();
-  if(exporters.length===0){
-    const o=document.createElement("option"); o.value="json"; o.textContent="JSON (app format)"; sel.appendChild(o);
-    sel.value="json";
-    return;
+  for(const e of EXPORTERS){
+    const o=document.createElement("option"); o.value=e.id; o.textContent=e.name||e.id;
+    sel.appendChild(o);
   }
-  for(const ex of exporters){
-    const o=document.createElement("option"); o.value=ex.id; o.textContent=ex.name; sel.appendChild(o);
-  }
-  if(keep && exporters.some(e=>e.id===keep)) sel.value=keep;
+  if(cur && EXPORTERS.some(e=>e.id===cur)) sel.value=cur;
+  else if(EXPORTERS[0]) sel.value=EXPORTERS[0].id;
 }
-
 function exportAll(){
-  const area=document.getElementById("ExportImportArea");
   const fmt=document.getElementById("exportFormat")?.value || "json";
   const visibleOnly=!!document.getElementById("exportVisibleOnly")?.checked;
-  const ctx={APP, ACTIVE, HOUSE, state, helpers:{escapeXml, formatFeetInches, normalizeRectAbs}};
-  const ex=getExporter(fmt);
-  try{
-    area.value = ex ? ex.export(ctx,{visibleOnly}) : JSON.stringify(APP,null,2);
-  } catch(e){
-    console.error(e);
-    alert("Export failed: "+(e?.message||e));
-  }
+  const exp=EXPORTERS.find(e=>e.id===fmt) || EXPORTERS[0];
+  if(!exp){ alert("No exporters registered."); return; }
+  const ctx={APP,ACTIVE,HOUSE,state,helpers:{clamp,roundHalf,formatFeetInches,normalizeRectAbs,normalizeRectRelToRoomPrimary,itemAbsRect,markerAbsPos}};
+  let out="";
+  try{ out=exp.export(ctx,{visibleOnly}) ?? ""; } catch(e){ out=`Export failed: ${e?.message||e}`; }
+  document.getElementById("ExportImportArea").value=String(out);
 }
 function importAll(){
   const raw=document.getElementById("ExportImportArea").value; if(!raw.trim()) return;
@@ -725,7 +739,11 @@ function updateSelectedXYInputs(obj){
 
 function render(){
   renderCounts();
-  const wrap=document.getElementById("canvasWrap"); wrap.innerHTML="";
+  const wrap=document.getElementById("canvasWrap");
+  wrap.innerHTML="";
+  const inner=document.createElement("div"); inner.id="canvasInner";
+  inner.style.transform=`translate(${state.view.tx}px, ${state.view.ty}px) scale(${state.view.scale})`;
+  inner.style.transformOrigin="0 0";
   for(const floor of HOUSE.floors){
     if(!state.visibleFloors.has(floor.id)) continue;
     const bounds=computeFloorBoundsIn(floor);
@@ -750,6 +768,7 @@ function render(){
       const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
       rect.setAttribute("x",x); rect.setAttribute("y",y); rect.setAttribute("width",w); rect.setAttribute("height",h);
       rect.setAttribute("fill",room.fillColor||st.defaultFillColor);
+      rect.setAttribute("fill-opacity", String(room.fillAlpha ?? st.defaultFillAlpha ?? 1));
       rect.setAttribute("stroke",room.lineColor||st.defaultLineColor);
       rect.setAttribute("stroke-width",st.strokeWidth);
       rect.classList.add("selectable");
@@ -770,7 +789,16 @@ function render(){
         drag.active=true; drag.kind="room"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
         drag.startPt=svgPoint(svg, ev.clientX, ev.clientY); drag.startNW={xIn:rr.xIn,yIn:rr.yIn}; };
       rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
-      rect.addEventListener("mousedown",onDown); marker.addEventListener("mousedown",onDown);
+      rect.addEventListener("mousedown",onDown);
+      marker.addEventListener("mousedown",(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+        drag.active=true; drag.kind="room-resize"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
+        drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
+        const rnw=normalizeRectAbs(room);
+        const moving=markerAbsPos(rnw, room, room.corner);
+        const opp=oppositeCorner(room.corner);
+        const fixed=markerAbsPos(rnw, room, opp);
+        drag.startRect={nw:rnw, wIn:room.wIn, hIn:room.hIn, corner:room.corner, moving, fixed}; drag.fixedPt=fixed;
+      });
 
       g.appendChild(rect); g.appendChild(marker);
 
@@ -801,6 +829,7 @@ function render(){
           const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
           rect.setAttribute("x",x); rect.setAttribute("y",y); rect.setAttribute("width",w); rect.setAttribute("height",h);
           rect.setAttribute("fill",it.fillColor||st.defaultFillColor);
+          rect.setAttribute("fill-opacity", String(it.fillAlpha ?? st.defaultFillAlpha ?? 1));
           rect.setAttribute("stroke",it.lineColor||st.defaultLineColor);
           rect.setAttribute("stroke-width",st.strokeWidth);
           rect.classList.add("selectable");
@@ -823,7 +852,15 @@ function render(){
             const rel=normalizeRectRelToRoomPrimary(it, room);
             drag.startNW={xIn:rel.xIn,yIn:rel.yIn}; };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
-          rect.addEventListener("mousedown",onDown); marker.addEventListener("mousedown",onDown);
+          rect.addEventListener("mousedown",onDown);
+          marker.addEventListener("mousedown",(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+            drag.active=true; drag.kind="item-resize"; drag.roomId=room.id; drag.itemId=it.id; drag.svg=svg;
+            drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
+            const moving=markerAbsPos(abs, it, it.corner);
+            const opp=oppositeCorner(it.corner);
+            const fixed=markerAbsPos(abs, it, opp);
+            drag.startRect={wIn:it.wIn, hIn:it.hIn, corner:it.corner, moving, fixed}; drag.fixedPt=fixed;
+          });
 
           g.appendChild(rect); g.appendChild(marker);
 
@@ -842,8 +879,9 @@ function render(){
     }
 
     svg.addEventListener("click",()=>setSelected(null));
-    block.appendChild(header); block.appendChild(svg); wrap.appendChild(block);
+    block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
   }
+  wrap.appendChild(inner);
   updateFloorSummary();
 }
 
@@ -855,6 +893,7 @@ function buildAll(){
   buildTypeToggles();
   buildLabelToggles();
   buildConfigForm();
+  refreshExportFormatSelect();
 }
 
 function wire(){
@@ -880,8 +919,13 @@ function wire(){
   document.getElementById("showAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id)); buildFloorToggles(); render(); saveApp();});
   document.getElementById("hideAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(); buildFloorToggles(); render(); saveApp();});
   document.getElementById("addFloor").addEventListener("click",(e)=>{e.preventDefault(); addFloor();});
-  const saveFloorsBtn=document.getElementById("saveFloorNames");
-  if(saveFloorsBtn) saveFloorsBtn.addEventListener("click",(e)=>{e.preventDefault(); saveAllFloorNames();});
+  document.getElementById("saveFloorNames").addEventListener("click",(e)=>{e.preventDefault();
+    document.querySelectorAll("#floorToggles input[type=text]").forEach(inp=>{
+      if(!inp.dataset.floorId) return;
+      const floor=findFloor(inp.dataset.floorId); if(floor) floor.name=inp.value||"(unnamed floor)";
+    });
+    buildAll(); render(); saveApp();
+  });
 
   document.getElementById("cfgReset").addEventListener("click",(e)=>{e.preventDefault(); resetConfig();});
   document.getElementById("cfgSave").addEventListener("click",(e)=>{e.preventDefault(); saveConfig();});
@@ -890,12 +934,33 @@ function wire(){
   document.getElementById("exportBtn").addEventListener("click",(e)=>{e.preventDefault(); exportAll();});
   document.getElementById("importBtn").addEventListener("click",(e)=>{e.preventDefault(); importAll();});
 
+  initPanZoom();
+
   window.addEventListener("mousemove",(ev)=>{
     if(!drag.active) return;
     const p=svgPoint(drag.svg, ev.clientX, ev.clientY);
     const dxIn=(p.x-drag.startPt.x)/state.ppi;
     const dyIn=(p.y-drag.startPt.y)/state.ppi;
-    if(drag.kind==="room"){
+    if(drag.kind==="room-resize"){
+      const res=findRoom(drag.roomId); if(!res) return;
+      const fixed=drag.startRect.fixed; const moving0=drag.startRect.moving;
+      const moving={xIn:moving0.xIn+dxIn, yIn:moving0.yIn+dyIn};
+      const x0=Math.min(fixed.xIn, moving.xIn); const y0=Math.min(fixed.yIn, moving.yIn);
+      const w=Math.max(1, Math.abs(fixed.xIn-moving.xIn)); const h=Math.max(1, Math.abs(fixed.yIn-moving.yIn));
+      res.room.wIn=roundHalf(w); res.room.hIn=roundHalf(h);
+      setRoomFromNW(res.room, x0, y0);
+      buildSelectedForm();
+    } else if(drag.kind==="item-resize"){
+      const res=findItem(drag.itemId); if(!res) return;
+      const fixed=drag.startRect.fixed; const moving0=drag.startRect.moving;
+      const moving={xIn:moving0.xIn+dxIn, yIn:moving0.yIn+dyIn};
+      const x0=Math.min(fixed.xIn, moving.xIn); const y0=Math.min(fixed.yIn, moving.yIn);
+      const w=Math.max(1, Math.abs(fixed.xIn-moving.xIn)); const h=Math.max(1, Math.abs(fixed.yIn-moving.yIn));
+      res.item.wIn=roundHalf(w); res.item.hIn=roundHalf(h);
+      const roomNW=normalizeRectAbs(res.room);
+      setItemFromNW_Rel(res.item, res.room, x0-roomNW.xIn, y0-roomNW.yIn);
+      buildSelectedForm();
+    } else if(drag.kind==="room"){
       const res=findRoom(drag.roomId); if(!res) return;
       const rr=normalizeRectAbs(res.room);
       const nwX=drag.startNW.xIn+dxIn;
@@ -917,8 +982,61 @@ function wire(){
   window.addEventListener("mouseup",()=>{drag.active=false; drag.kind=null; drag.roomId=null; drag.itemId=null; drag.svg=null;});
 }
 
-function initApp(forceSeed=false){
-  APP = (!forceSeed ? loadApp() : null) || seedApp();
+
+function migrateColorsAndDefaults(app){
+  try{
+    for(const s of app.structures||[]){
+      if(!s.types) continue;
+      for(const [k,st] of Object.entries(s.types)){
+        // migrate default fill rgba -> color + alpha
+        if(typeof st.defaultFillColor==="string"){
+          const m=st.defaultFillColor.match(/^rgba\((\d+),(\d+),(\d+),([0-9.]+)\)$/i);
+          if(m){
+            const r=parseInt(m[1],10), g=parseInt(m[2],10), b=parseInt(m[3],10), a=parseFloat(m[4]);
+            st.defaultFillColor=rgbToHex({r,g,b}).toLowerCase();
+            st.defaultFillAlpha=clamp(a,0,1);
+          }
+        }
+        if(st.defaultFillAlpha==null) st.defaultFillAlpha=1;
+        if(st.defaultWIn==null) st.defaultWIn=48;
+        if(st.defaultHIn==null) st.defaultHIn=48;
+        if(st.defaultHeightIn==null) st.defaultHeightIn=96;
+      }
+      for(const f of s.house?.floors||[]){
+        for(const r of f.rooms||[]){
+          if(typeof r.fillColor==="string"){
+            const m=r.fillColor.match(/^rgba\((\d+),(\d+),(\d+),([0-9.]+)\)$/i);
+            if(m){ r.fillAlpha=clamp(parseFloat(m[4]),0,1); r.fillColor=rgbToHex({r:+m[1],g:+m[2],b:+m[3]}).toLowerCase(); }
+          }
+          if(r.fillAlpha==null) r.fillAlpha=1;
+          for(const it of r.items||[]){
+            if(typeof it.fillColor==="string"){
+              const m=it.fillColor.match(/^rgba\((\d+),(\d+),(\d+),([0-9.]+)\)$/i);
+              if(m){ it.fillAlpha=clamp(parseFloat(m[4]),0,1); it.fillColor=rgbToHex({r:+m[1],g:+m[2],b:+m[3]}).toLowerCase(); }
+            }
+            if(it.fillAlpha==null) it.fillAlpha=1;
+          }
+        }
+      }
+    }
+  }catch{}
+  return app;
+}
+
+async function loadSeedFromServer(){
+  try{
+    const res=await fetch("default.json",{cache:"no-store"});
+    if(res.ok){
+      const j=await res.json();
+      return j;
+    }
+  }catch{}
+  return seedApp(); // fallback
+}
+async function initApp(forceSeed=false){
+  APP = (!forceSeed ? loadApp() : null);
+  if(!APP){ APP = await loadSeedFromServer(); }
+  APP = migrateColorsAndDefaults(APP);
   const activeId=APP.activeId || APP.structures[0].id;
   ACTIVE=APP.structures.find(s=>s.id===activeId) || APP.structures[0];
   APP.activeId=ACTIVE.id;
@@ -934,4 +1052,43 @@ function initApp(forceSeed=false){
 }
 
 wire();
-initApp(false);
+(async()=>{await initApp(false);})();
+function initPanZoom(){
+  const wrap=document.getElementById("canvasWrap");
+  if(!wrap || wrap.__pz) return;
+  wrap.__pz=true;
+
+  wrap.addEventListener("wheel",(ev)=>{
+    ev.preventDefault(); // always zoom when pointer is over the canvas
+    const rect=wrap.getBoundingClientRect();
+    const mx=ev.clientX-rect.left;
+    const my=ev.clientY-rect.top;
+    const old=state.view.scale;
+    const delta=-ev.deltaY;
+    const factor=delta>0?1.08:0.92;
+    const ns=clamp(old*factor,0.2,5);
+    const wx=(mx-state.view.tx)/old;
+    const wy=(my-state.view.ty)/old;
+    state.view.scale=ns;
+    state.view.tx=mx-wx*ns;
+    state.view.ty=my-wy*ns;
+    render();
+  }, {passive:false});
+
+  wrap.addEventListener("contextmenu",(ev)=>{ if(pan.active||ev.button===2) ev.preventDefault(); });
+  wrap.addEventListener("mousedown",(ev)=>{
+    // Pan with right-drag anywhere on the canvas (objects or background)
+    if(ev.button===2){
+      ev.preventDefault();
+      pan.active=true; pan.startX=ev.clientX; pan.startY=ev.clientY; pan.startTx=state.view.tx; pan.startTy=state.view.ty;
+    }
+  });
+  window.addEventListener("mousemove",(ev)=>{
+    if(!pan.active) return;
+    state.view.tx=pan.startTx+(ev.clientX-pan.startX);
+    state.view.ty=pan.startTy+(ev.clientY-pan.startY);
+    render();
+  });
+  window.addEventListener("mouseup",()=>{pan.active=false;});
+}
+

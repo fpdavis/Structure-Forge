@@ -1,0 +1,254 @@
+{
+  "version": 11,
+  "activeId": "seed-1",
+  "structures": [
+    {
+      "id": "seed-1",
+      "name": "My House",
+      "house": {
+        "floors": [
+          {
+            "id": "f1",
+            "name": "First Floor",
+            "rooms": [
+              {
+                "id": "r1",
+                "type": "Room",
+                "floorId": "f1",
+                "name": "Living Room",
+                "description": "Main living area.",
+                "corner": "NW",
+                "xIn": 20,
+                "yIn": 20,
+                "wIn": 180,
+                "hIn": 140,
+                "heightIn": 96,
+                "lineColor": "#cfd6e6",
+                "cornerColor": "#55d6be",
+                "fillColor": "#ffffff",
+                "fillAlpha": 0.03,
+                "items": [
+                  {
+                    "id": "i1",
+                    "type": "Door",
+                    "roomId": "r1",
+                    "name": "Front Door",
+                    "description": "Main entry door.",
+                    "corner": "NW",
+                    "xIn": 10,
+                    "yIn": 130,
+                    "wIn": 36,
+                    "hIn": 6,
+                    "heightIn": 80,
+                    "lineColor": "#ffcd6a",
+                    "cornerColor": "#ffcd6a",
+                    "fillColor": "#ffcd6a",
+                    "fillAlpha": 0.05
+                  },
+                  {
+                    "id": "i2",
+                    "type": "Window",
+                    "roomId": "r1",
+                    "name": "Window",
+                    "description": "Living room window.",
+                    "corner": "NW",
+                    "xIn": 50,
+                    "yIn": 0,
+                    "wIn": 48,
+                    "hIn": 6,
+                    "heightIn": 48,
+                    "lineColor": "#6aa6ff",
+                    "cornerColor": "#6aa6ff",
+                    "fillColor": "#6aa6ff",
+                    "fillAlpha": 0.05
+                  },
+                  {
+                    "id": "i3",
+                    "type": "Outlet",
+                    "roomId": "r1",
+                    "name": "Outlet",
+                    "description": "North wall outlet.",
+                    "corner": "NW",
+                    "xIn": 15,
+                    "yIn": 15,
+                    "wIn": 6,
+                    "hIn": 6,
+                    "heightIn": 18,
+                    "lineColor": "#6aff9f",
+                    "cornerColor": "#6aff9f",
+                    "fillColor": "#6aff9f",
+                    "fillAlpha": 0.05
+                  },
+                  {
+                    "id": "i4",
+                    "type": "Light",
+                    "roomId": "r1",
+                    "name": "Ceiling Light",
+                    "description": "Main ceiling fixture.",
+                    "corner": "NW",
+                    "xIn": 85,
+                    "yIn": 70,
+                    "wIn": 8,
+                    "hIn": 8,
+                    "heightIn": 96,
+                    "lineColor": "#ffffff",
+                    "cornerColor": "#ffffff",
+                    "fillColor": "#ffffff",
+                    "fillAlpha": 0.06
+                  }
+                ]
+              },
+              {
+                "id": "r2",
+                "type": "Room",
+                "floorId": "f1",
+                "name": "Kitchen",
+                "description": "Kitchen and dining.",
+                "corner": "NW",
+                "xIn": 210,
+                "yIn": 20,
+                "wIn": 170,
+                "hIn": 110,
+                "heightIn": 96,
+                "lineColor": "#cfd6e6",
+                "cornerColor": "#55d6be",
+                "fillColor": "#ffffff",
+                "fillAlpha": 0.03,
+                "items": []
+              }
+            ]
+          },
+          {
+            "id": "f2",
+            "name": "Second Floor",
+            "rooms": [
+              {
+                "id": "r3",
+                "type": "Room",
+                "floorId": "f2",
+                "name": "Bedroom",
+                "description": "Primary bedroom.",
+                "corner": "NW",
+                "xIn": 20,
+                "yIn": 20,
+                "wIn": 170,
+                "hIn": 130,
+                "heightIn": 96,
+                "lineColor": "#cfd6e6",
+                "cornerColor": "#55d6be",
+                "fillColor": "#ffffff",
+                "fillAlpha": 0.03,
+                "items": [
+                  {
+                    "id": "i5",
+                    "type": "Window",
+                    "roomId": "r3",
+                    "name": "Window",
+                    "description": "Bedroom window.",
+                    "corner": "NW",
+                    "xIn": 40,
+                    "yIn": 0,
+                    "wIn": 48,
+                    "hIn": 6,
+                    "heightIn": 48,
+                    "lineColor": "#6aa6ff",
+                    "cornerColor": "#6aa6ff",
+                    "fillColor": "#6aa6ff",
+                    "fillAlpha": 0.05
+                  },
+                  {
+                    "id": "i6",
+                    "type": "Outlet",
+                    "roomId": "r3",
+                    "name": "Outlet",
+                    "description": "Bedside outlet.",
+                    "corner": "NW",
+                    "xIn": 20,
+                    "yIn": 115,
+                    "wIn": 6,
+                    "hIn": 6,
+                    "heightIn": 18,
+                    "lineColor": "#6aff9f",
+                    "cornerColor": "#6aff9f",
+                    "fillColor": "#6aff9f",
+                    "fillAlpha": 0.05
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "types": {
+        "Room": {
+          "strokeWidth": 6,
+          "defaultLineColor": "#cfd6e6",
+          "defaultCornerColor": "#55d6be",
+          "defaultFillColor": "#ffffff",
+          "defaultFillAlpha": 0.03,
+          "defaultWIn": 144,
+          "defaultHIn": 120,
+          "defaultHeightIn": 96
+        },
+        "Door": {
+          "strokeWidth": 5,
+          "defaultLineColor": "#ffcd6a",
+          "defaultCornerColor": "#ffcd6a",
+          "defaultFillColor": "#ffcd6a",
+          "defaultFillAlpha": 0.05,
+          "defaultWIn": 36,
+          "defaultHIn": 6,
+          "defaultHeightIn": 80
+        },
+        "Window": {
+          "strokeWidth": 4,
+          "defaultLineColor": "#6aa6ff",
+          "defaultCornerColor": "#6aa6ff",
+          "defaultFillColor": "#6aa6ff",
+          "defaultFillAlpha": 0.05,
+          "defaultWIn": 48,
+          "defaultHIn": 6,
+          "defaultHeightIn": 48
+        },
+        "Opening": {
+          "strokeWidth": 4,
+          "defaultLineColor": "#c46aff",
+          "defaultCornerColor": "#c46aff",
+          "defaultFillColor": "#c46aff",
+          "defaultFillAlpha": 0.05,
+          "defaultWIn": 36,
+          "defaultHIn": 6,
+          "defaultHeightIn": 80
+        },
+        "Outlet": {
+          "strokeWidth": 3,
+          "defaultLineColor": "#6aff9f",
+          "defaultCornerColor": "#6aff9f",
+          "defaultFillColor": "#6aff9f",
+          "defaultFillAlpha": 0.05,
+          "defaultWIn": 6,
+          "defaultHIn": 6,
+          "defaultHeightIn": 18
+        },
+        "Light": {
+          "strokeWidth": 3,
+          "defaultLineColor": "#ffffff",
+          "defaultCornerColor": "#ffffff",
+          "defaultFillColor": "#ffffff",
+          "defaultFillAlpha": 0.06,
+          "defaultWIn": 8,
+          "defaultHIn": 8,
+          "defaultHeightIn": 96
+        }
+      },
+      "typeOrder": [
+        "Room",
+        "Door",
+        "Window",
+        "Opening",
+        "Outlet",
+        "Light"
+      ]
+    }
+  ]
+}
