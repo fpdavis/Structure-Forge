@@ -25,20 +25,10 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 
 ## TODO List
 
-### 1) Project / JSON format stabilization (highest priority)
-- **Improved JSON efficiency**
-  - Remove empty strings (e.g., `description: ""`)
-  - Avoid writing values that are implied by type defaults
-  - Remove redundant IDs/fields that can be inferred from containment (ex: `roomId`, `floorId`)
-  - Consider schema versioning and migrations
+### 2) Core editing enhancements (easy → medium)
 - **Define nomenclature**
   - Standard terms for: structure, floor, room, item/object, type, instance
   - Document canonical coordinate system and corner semantics
-- **File-based projects**
-  - Open/save `.plan.json` locally (download/upload)
-  - Autosave support (and conflict handling with localStorage)
-
-### 2) Core editing enhancements (easy → medium)
 - **Fill Opacity Steps should be .1**
 - **Label z-index should be on top of all objects**
 - **Additional keyboard shortcuts**
@@ -52,6 +42,7 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - Reassign item to a different room from the details panel
 - **Ability to drag and drop objects from one room to another**
   - From list to list, or via canvas drop target
+- Autosave support (and conflict handling with localStorage)
 
 ### 3) Interaction + UX improvements (medium)
 - **Lock/freeze objects to prevent accidental edits**
@@ -81,7 +72,7 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - Per room
   - Totals per floor
 - **Rulers and guides**
-  - Drag guides like design tools
+  - Rulers along X/Y axis
   - Optional grid and snap integration
 
 ### 5) Advanced object modeling (hard)
