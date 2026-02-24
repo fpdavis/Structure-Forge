@@ -242,7 +242,7 @@ const ITEM_FIELDS=[
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
-  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.01"}
+  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.1"}
 ];
 
 function buildSelectedForm(){
@@ -286,7 +286,8 @@ function buildSelectedForm(){
       input=document.createElement("select");
       for(const opt of ACTIVE.typeOrder.filter(t=>t!=="Room")){ const o=document.createElement("option"); o.value=opt; o.textContent=opt; input.appendChild(o); }
     } else {
-      input=document.createElement("input"); input.type=f.kind==="number"?"number":"text"; if(f.kind==="number") input.step="0.5";
+      input=document.createElement("input"); input.type=f.kind==="number"?"number":"text";
+	  if(f.kind==="number") input.step=f.step||"0.5";
     }
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
