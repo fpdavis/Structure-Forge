@@ -89,7 +89,7 @@
 
   registerExporter({
     id: "json",
-    name: "JSON (app format)",
+    name: "JSON (native format)",
     export(ctx, opts) {
       // typeDefaults comes from the live ACTIVE.types (already normalised to object)
       const typeDefaults = ctx.ACTIVE.types || {};
@@ -97,6 +97,7 @@
       let clone = JSON.parse(JSON.stringify(ctx.APP));
 
       if (opts?.visibleOnly) {
+        // Only export the active structure, with only visible floors and visible item types.
         const active = clone.structures.find(s => s.id === clone.activeId) || clone.structures[0];
         const visFloors = ctx.state.visibleFloors;
         const visTypes  = (t) => t === "Room" ? true : ctx.state.visibleTypes.has(t);
@@ -109,9 +110,14 @@
             });
             return f;
           });
+        // Discard all other structures — visible-only export is scoped to the active structure only.
+        clone.structures = [active];
       }
 
       const out = {
+        application: "ExF Productions' Structure Forge",
+        url: window.location.href,
+        dateTime: new Date().toISOString(),
         schemaVersion: SCHEMA_VERSION,
         activeId: clone.activeId,
         structures: clone.structures.map(s => stripStructure(s, typeDefaults))

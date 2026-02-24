@@ -801,6 +801,14 @@ function refreshExportFormatSelect(){
   if(cur && EXPORTERS.some(e=>e.id===cur)) sel.value=cur;
   else if(EXPORTERS[0]) sel.value=EXPORTERS[0].id;
 }
+// File extension / MIME map per exporter id
+const EXPORTER_FILE_META={
+  json:{ext:"sf-plan.json", mime:"application/json"},
+  text:{ext:"sf-plan.txt",  mime:"text/plain"},
+  svg: {ext:"sf-plan.svg",  mime:"image/svg+xml"},
+  dxf: {ext:"sf-plan.dxf",  mime:"application/dxf"},
+  logo:{ext:"sf-plan.logo.txt", mime:"text/plain"}
+};
 function exportAll(){
   const fmt=document.getElementById("exportFormat")?.value || "json";
   const visibleOnly=!!document.getElementById("exportVisibleOnly")?.checked;
@@ -808,14 +816,39 @@ function exportAll(){
   if(!exp){ alert("No exporters registered."); return; }
   const ctx={APP,ACTIVE,HOUSE,state,helpers:{clamp,roundHalf,formatFeetInches,normalizeRectAbs,normalizeRectRelToRoomPrimary,itemAbsRect,markerAbsPos}};
   let out="";
-  try{ out=exp.export(ctx,{visibleOnly}) ?? ""; } catch(e){ out=`Export failed: ${e?.message||e}`; }
-  document.getElementById("ExportImportArea").value=String(out);
+  try{ out=exp.export(ctx,{visibleOnly}) ?? ""; } catch(e){ alert(`Export failed: ${e?.message||e}`); return; }
+  // Build a safe filename from the active structure name
+  const structName=(ACTIVE?.name||"structure").replace(/[^a-zA-Z0-9_\-]/g,"_");
+  const meta=EXPORTER_FILE_META[fmt]||{ext:`sf-plan.${fmt}`,mime:"text/plain"};
+  const filename=`${structName}.${meta.ext}`;
+  const blob=new Blob([out],{type:meta.mime});
+  const blobUrl=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=blobUrl; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(blobUrl); a.remove(); },1500);
+  _setExportImportHint(`Saved: ${filename}`,4000);
 }
 function importAll(){
-  const raw=document.getElementById("ExportImportArea").value; if(!raw.trim()) return;
-  let parsed; try{parsed=JSON.parse(raw);}catch{alert("Invalid JSON");return;}
-  if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0){alert("Invalid payload: expected {structures:[...]}");return;}
-  APP=hydrateApp(parsed); if(!APP.activeId) APP.activeId=APP.structures[0].id; setActiveStructure(APP.activeId);
+  // Trigger the hidden file picker
+  document.getElementById("importFileInput").click();
+}
+function importFromFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const raw=ev.target.result; if(!raw.trim()) return;
+    let parsed; try{parsed=JSON.parse(raw);}catch{ alert("Invalid JSON – not a valid .sf-plan.json file."); return; }
+    // Strip export-only metadata before hydrating
+    const {application:_a, url:_u, dateTime:_d, ...rest}=parsed;
+    if(!rest||!Array.isArray(rest.structures)||rest.structures.length===0){ alert("Invalid payload: expected {structures:[...]}"); return; }
+    APP=hydrateApp(rest); if(!APP.activeId) APP.activeId=APP.structures[0].id; setActiveStructure(APP.activeId);
+    _setExportImportHint(`Opened: ${file.name}`,4000);
+  };
+  reader.readAsText(file);
+}
+function _setExportImportHint(msg,ms){
+  const h=document.getElementById("exportImportHint"); if(!h) return;
+  h.textContent=msg; clearTimeout(h._t); h._t=setTimeout(()=>{ h.textContent=""; },ms);
 }
 
 function computeFloorBoundsIn(floor){
@@ -1052,6 +1085,19 @@ function wire(){
 
   document.getElementById("exportBtn").addEventListener("click",(e)=>{e.preventDefault(); exportAll();});
   document.getElementById("importBtn").addEventListener("click",(e)=>{e.preventDefault(); importAll();});
+  // Wire hidden file input for open-file import
+  document.getElementById("importFileInput").addEventListener("change",function(){
+    if(this.files && this.files[0]){ importFromFile(this.files[0]); }
+    this.value=""; // Reset so same file can be re-opened
+  });
+  // Show/hide Import button based on selected format (only JSON is importable)
+  function updateImportBtnVisibility(){
+    const fmt=document.getElementById("exportFormat")?.value||"json";
+    const btn=document.getElementById("importBtn");
+    if(btn) btn.style.display=(fmt==="json")?"":"none";
+  }
+  document.getElementById("exportFormat")?.addEventListener("change", updateImportBtnVisibility);
+  updateImportBtnVisibility();
 
   initPanZoom();
 
