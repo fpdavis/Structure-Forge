@@ -1,5 +1,5 @@
 
-const STORAGE_KEY="house-layout-viewer:v5";
+const STORAGE_KEY="house-layout-viewer:v6";
 let APP=null, ACTIVE=null, HOUSE=null;
 
 const state={ ppi:3, visibleFloors:new Set(), visibleTypes:new Set(), visibleLabels:{}, selected:null, selectedSnapshot:null, view:{scale:1,tx:0,ty:0} };
@@ -9,8 +9,12 @@ const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const inToPx=(inch)=>inch*state.ppi;
 
-function guid(){ if(typeof crypto!=="undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;const v=c==="x"?r:(r&0x3|0x8);return v.toString(16);}); }
+function guid(){
+  if(typeof crypto!=="undefined" && crypto.getRandomValues){
+    return Array.from(crypto.getRandomValues(new Uint8Array(4)), b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  return Math.floor(Math.random()*0xffffffff).toString(16).padStart(8,"0");
+}
 function escapeXml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#39;"); }
 function roundHalf(n){ return Math.round(n*2)/2; }
 function formatFeetInches(totalIn){ const inches=Math.round(totalIn); const ft=Math.floor(inches/12); const rem=inches%12;
@@ -75,8 +79,51 @@ function markerAbsPos(objNW, obj, corner){
 function oppositeCorner(c){ return c==="NW"?"SE":c==="SE"?"NW":c==="NE"?"SW":"NE"; }
 function setStatus(msg){ const el=document.getElementById("storageStatus"); if(el) el.textContent=msg; }
 function saveApp(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(APP)); setStatus("Storage: saved"); } catch { setStatus("Storage: failed to save"); } }
+/**
+ * Re-inflate all fields that the v6 JSON exporter strips for compactness.
+ * Safe to call on both old (pre-v6) and v6+ payloads — already-present values
+ * are never overwritten.
+ *
+ * Handles:
+ *  - types: list [{name,…}] → object {"TypeName":{…}}  (fixes first-load style bug)
+ *  - rooms:  corner default "NW", type "Room", floorId from containment
+ *  - items:  corner default "NW", roomId from containment,
+ *            name default = type,
+ *            wIn/hIn/heightIn restored from type defaults when absent
+ */
+function hydrateApp(parsed){
+  for(const s of (parsed.structures||[])){
+    // --- Normalise types: list → keyed object ---
+    if(Array.isArray(s.types)){
+      const obj={};
+      for(const t of s.types){ if(t&&t.name){ const {name,...rest}=t; obj[name]=rest; } }
+      s.types=obj;
+    }
+    const td=s.types||{};
+
+    for(const floor of (s.house?.floors||[])){
+      for(const room of (floor.rooms||[])){
+        if(!room.corner)  room.corner  = "NW";
+        if(!room.type)    room.type    = "Room";
+        if(!room.floorId) room.floorId = floor.id;
+        for(const item of (room.items||[])){
+          if(!item.corner)  item.corner  = "NW";
+          if(!item.roomId)  item.roomId  = room.id;
+          if(!item.name)    item.name    = item.type;
+          // Restore dimension defaults from type config
+          const st=td[item.type]||{};
+          if(item.wIn      == null && st.defaultWIn      != null) item.wIn      = st.defaultWIn;
+          if(item.hIn      == null && st.defaultHIn      != null) item.hIn      = st.defaultHIn;
+          if(item.heightIn == null && st.defaultHeightIn != null) item.heightIn = st.defaultHeightIn;
+        }
+      }
+    }
+  }
+  return parsed;
+}
+
 function loadApp(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return null; const parsed=JSON.parse(raw);
-    if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0) return null; return parsed; } catch { return null; } }
+    if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0) return null; return hydrateApp(parsed); } catch { return null; } }
 
 function applyDefaultsToObj(o){
   const st=ACTIVE.types[o.type] || (ACTIVE.types[o.type]=genDefaultStyle(Object.keys(ACTIVE.types).length));
@@ -129,7 +176,7 @@ function seedApp(){
   for(const f of house.floors){ for(const r of f.rooms){ r.lineColor=types.Room.defaultLineColor; r.cornerColor=types.Room.defaultCornerColor; r.fillColor=types.Room.defaultFillColor; r.fillAlpha=types.Room.defaultFillAlpha;
       for(const it of r.items){ if(!types[it.type]) types[it.type]=genDefaultStyle(Object.keys(types).length);
         const st=types[it.type]; it.lineColor=st.defaultLineColor; it.cornerColor=st.defaultCornerColor; it.fillColor=st.defaultFillColor; it.fillAlpha=st.defaultFillAlpha; } } }
-  return {version:5, activeId:id, structures:[{id,name:"My House",house,types,typeOrder}]};
+  return {schemaVersion:6, activeId:id, structures:[{id,name:"My House",house,types,typeOrder}]};
 }
 
 function setActiveStructure(id){
@@ -243,6 +290,8 @@ function buildSelectedForm(){
     }
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
+    // For select fields, fall back to first option rather than leaving blank
+    if((f.kind==="select"||f.kind==="selectDynamic") && v==="" && input.options.length) v=input.options[0].value;
     if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha"].includes(f.key) && v!=="" && Number.isFinite(+v)){
       const step=(f.step?parseFloat(f.step):0.5);
       v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
@@ -766,7 +815,7 @@ function importAll(){
   const raw=document.getElementById("ExportImportArea").value; if(!raw.trim()) return;
   let parsed; try{parsed=JSON.parse(raw);}catch{alert("Invalid JSON");return;}
   if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0){alert("Invalid payload: expected {structures:[...]}");return;}
-  APP=parsed; if(!APP.activeId) APP.activeId=APP.structures[0].id; setActiveStructure(APP.activeId);
+  APP=hydrateApp(parsed); if(!APP.activeId) APP.activeId=APP.structures[0].id; setActiveStructure(APP.activeId);
 }
 
 function computeFloorBoundsIn(floor){
@@ -1105,7 +1154,7 @@ async function loadSeedFromServer(){
 }
 async function initApp(forceSeed=false){
   APP = (!forceSeed ? loadApp() : null);
-  if(!APP){ APP = await loadSeedFromServer(); }
+  if(!APP){ APP = hydrateApp(await loadSeedFromServer()); }
   APP = migrateColorsAndDefaults(APP);
   const activeId=APP.activeId || APP.structures[0].id;
   ACTIVE=APP.structures.find(s=>s.id===activeId) || APP.structures[0];
