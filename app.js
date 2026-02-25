@@ -901,6 +901,9 @@ function render(){
     svg.classList.add("floorSvg");
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
+    // Label group — appended last so labels always render above all objects
+    const labelGroup=document.createElementNS("http://www.w3.org/2000/svg","g");
+    labelGroup.setAttribute("class","labelLayer");
 
     // Rooms
     for(const room of floor.rooms){
@@ -929,12 +932,12 @@ function render(){
       marker.classList.add("selectable");
 
       const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"room", floorId:floor.id, roomId:room.id}); populateNewItemSelectors();};
-      const onDown=(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+      const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
         drag.active=true; drag.kind="room"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
         drag.startPt=svgPoint(svg, ev.clientX, ev.clientY); drag.startNW={xIn:rr.xIn,yIn:rr.yIn}; };
       rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
       rect.addEventListener("mousedown",onDown);
-      marker.addEventListener("mousedown",(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+      marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
         drag.active=true; drag.kind="room-resize"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
         drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
         const rnw=normalizeRectAbs(room);
@@ -953,7 +956,7 @@ function render(){
         const t2=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t2.setAttribute("x",x+w/2); t2.setAttribute("dy","14");
         t2.textContent=`(${formatFeetInches(room.wIn)} × ${formatFeetInches(room.hIn)})`;
         t.appendChild(t1); t.appendChild(t2);
-        g.appendChild(t);
+        labelGroup.appendChild(t);
       }
       svg.appendChild(g);
     }
@@ -990,14 +993,14 @@ function render(){
           marker.classList.add("selectable");
 
           const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"item", floorId:floor.id, roomId:room.id, itemId:it.id}); populateNewItemSelectors();};
-          const onDown=(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
             drag.active=true; drag.kind="item"; drag.roomId=room.id; drag.itemId=it.id; drag.svg=svg;
             drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
             const rel=normalizeRectRelToRoomPrimary(it, room);
             drag.startNW={xIn:rel.xIn,yIn:rel.yIn}; };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
           rect.addEventListener("mousedown",onDown);
-          marker.addEventListener("mousedown",(ev)=>{ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
             drag.active=true; drag.kind="item-resize"; drag.roomId=room.id; drag.itemId=it.id; drag.svg=svg;
             drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
             const moving=markerAbsPos(abs, it, it.corner);
@@ -1015,7 +1018,7 @@ function render(){
             const t2=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t2.setAttribute("x",x+w+inToPx(3)); t2.setAttribute("dy","13");
             t2.textContent=`(${formatFeetInches(it.wIn)} × ${formatFeetInches(it.hIn)})`;
             t.appendChild(t1); t.appendChild(t2);
-            g.appendChild(t);
+            labelGroup.appendChild(t);
           }
           svg.appendChild(g);
         }
@@ -1023,6 +1026,7 @@ function render(){
     }
 
     svg.addEventListener("click",()=>setSelected(null));
+    svg.appendChild(labelGroup);
     block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
   }
   wrap.appendChild(inner);
