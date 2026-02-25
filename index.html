@@ -186,10 +186,152 @@ Notes
 
     <details class="panel">
       <summary><span class="sumTitle">Help / About</span><span class="sumRight"><span class="chev"></span></span></summary>
-    <div class="panelBody">
-	<strong>NW/NE/SW/SE</strong> (North-West, North-East, South-West, South-East) indicates the primary corner the given (x,y) refers to. Left mouse button selects objects. Select corner and hold mouse button to resize object. Select object and hold mouse button to move object. Scroll wheel zooms. Hold right mouse button to pan. Add New Item object container is pre-populated/defaulted by mouse selection. Clicking on a color swatch next to a color input field will allow you to change the color via a color picker.
-	</div>
-	</details>
+      <div class="panelBody" style="font-size:12px;line-height:1.5;color:var(--text);">
+
+        <!-- ── ABOUT ─────────────────────────────── -->
+        <div style="text-align:center;padding:10px 0 14px;">
+          <div style="font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--accent);">⚒ Structure Forge</div>
+          <div style="color:var(--muted);font-size:11px;margin-top:3px;">by ExF Productions</div>
+          <div style="margin-top:8px;color:var(--muted);font-size:11px;line-height:1.4;">
+            Browser-based floor &amp; structure layout tool.<br>
+            Model buildings with floors, rooms, and objects.
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── CORNER REFERENCE ──────────────────── -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">📐 Corner Reference</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;text-align:center;margin-bottom:6px;">
+            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">NW</span><br><span style="color:var(--muted);font-size:10px;">North-West</span></div>
+            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">NE</span><br><span style="color:var(--muted);font-size:10px;">North-East</span></div>
+            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">SW</span><br><span style="color:var(--muted);font-size:10px;">South-West</span></div>
+            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">SE</span><br><span style="color:var(--muted);font-size:10px;">South-East</span></div>
+          </div>
+          <div style="color:var(--muted);font-size:11px;">The selected corner defines which point the <strong style="color:var(--text);">(X, Y)</strong> coordinate refers to on the element. Can be used to designate hinges.</div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── MOUSE CONTROLS ────────────────────── -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">🖱 Mouse Controls</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">L-Click</span>
+              <span style="color:var(--muted);font-size:11px;">Select an object</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">L-Drag</span>
+              <span style="color:var(--muted);font-size:11px;">Move selected object</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Corner</span>
+              <span style="color:var(--muted);font-size:11px;">Drag a corner handle to resize</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">R-Drag</span>
+              <span style="color:var(--muted);font-size:11px;">Pan the canvas</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Scroll</span>
+              <span style="color:var(--muted);font-size:11px;">Zoom in / out</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">R-Click</span>
+              <span style="color:var(--muted);font-size:11px;">Context menu — duplicate, delete, lock, bring front/back</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Swatch</span>
+              <span style="color:var(--muted);font-size:11px;">Click color swatch to open color picker</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── KEYBOARD SHORTCUTS ────────────────── -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">⌨ Keyboard Shortcuts</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ins / Ctrl+D</span>
+              <span style="color:var(--muted);font-size:11px;">Duplicate selected object</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Del</span>
+              <span style="color:var(--muted);font-size:11px;">Delete selected object</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">↑↓←→</span>
+              <span style="color:var(--muted);font-size:11px;">Nudge selected object (1 inch)</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">⇧ + ↑↓←→</span>
+              <span style="color:var(--muted);font-size:11px;">Nudge larger step (12 inches)</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Esc</span>
+              <span style="color:var(--muted);font-size:11px;">Clear selection / cancel rename</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Enter</span>
+              <span style="color:var(--muted);font-size:11px;">Commit inline rename</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── FEATURES ───────────────────────────── -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">✨ Features</div>
+          <div style="display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:11px;">
+            <div>📂 &nbsp;Multi-structure &amp; multi-floor projects</div>
+            <div>🏠 &nbsp;Typed elements: Rooms, Doors, Windows,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Outlets, Lights, custom types &amp; more</div>
+            <div>📏 &nbsp;Measurements in inches; adjustable scale</div>
+            <div>🔢 &nbsp;Selectable units: inches, ft/in, metric</div>
+            <div>🔄 &nbsp;Rotate items and rooms</div>
+            <div>📐 &nbsp;Area &amp; perimeter calculations per room/floor</div>
+            <div>📏 &nbsp;Canvas rulers and optional snap grid</div>
+            <div>🔒 &nbsp;Lock objects to prevent accidental edits</div>
+            <div>🎨 &nbsp;Per-type default colors &amp; dimensions</div>
+            <div>🌓 &nbsp;Dark / light theme toggle</div>
+            <div>💾 &nbsp;Autosave to browser storage</div>
+            <div>↕️ &nbsp;Drag &amp; drop items between rooms</div>
+            <div>🔁 &nbsp;Assign / reassign item room from detail panel</div>
+            <div>🔺 &nbsp;Non-rectangular shapes: circle, triangle,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;polygon with configurable sides</div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── WORKFLOW TIPS ──────────────────────── -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">💡 Tips</div>
+          <div style="display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:11px;">
+            <div>• <strong style="color:var(--text);">Add New Item</strong> pre-populates floor &amp; room from your last canvas click.</div>
+            <div>• <strong style="color:var(--text);">Z-order</strong> is type-based. Use ↑↓ arrows in Element Visibility to layer types.</div>
+            <div>• <strong style="color:var(--text);">Fill Opacity</strong> steps in increments of 0.1 (0 = transparent, 1 = solid).</div>
+            <div>• <strong style="color:var(--text);">Export formats:</strong> JSON (canonical), Text, SVG, DXF, LOGO (turtle).</div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+
+        <!-- ── CREDITS ────────────────────────────── -->
+        <div style="text-align:center;color:var(--muted);font-size:11px;line-height:1.6;padding-bottom:4px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">🏅 Credits</div>
+          <div>Built with ♥ by <strong style="color:var(--text);">ExF Productions</strong></div>
+          <div style="margin-top:4px;">
+            <a href="https://github.com/fpdavis/Structure-Forge" target="_blank" style="color:var(--accent);text-decoration:none;">github.com/fpdavis/Structure-Forge</a>
+          </div>
+          <div style="margin-top:6px;font-size:10px;color:#555;">No external libraries · Pure JS + SVG</div>
+        </div>
+
+      </div>
+    </details>
 		
 	<div class="line2">
       <div class="subtle" id="storageStatus">Storage: not saved yet</div>
