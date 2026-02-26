@@ -2,7 +2,32 @@
 const STORAGE_KEY="house-layout-viewer:v6";
 let APP=null, ACTIVE=null, HOUSE=null;
 
-const state={ ppi:3, visibleFloors:new Set(), visibleTypes:new Set(), visibleLabels:{}, selected:null, selectedSnapshot:null, view:{scale:1,tx:0,ty:0} };
+const DEFAULT_UI={
+  ppi:3,
+  units:"imperial", // label mode only (no conversion)
+  grid:{
+    enabled:false,
+    style:"line", // line | dot
+    minorStep:12,
+    showMinor:true,
+    minorColor:"#ffffff",
+    majorColor:"#ffffff",
+    minorOpacity:0.18,
+    majorOpacity:0.40
+  }
+};
+
+const state={
+  ppi:DEFAULT_UI.ppi,
+  units:DEFAULT_UI.units,
+  grid:JSON.parse(JSON.stringify(DEFAULT_UI.grid)),
+  visibleFloors:new Set(),
+  visibleTypes:new Set(),
+  visibleLabels:{},
+  selected:null,
+  selectedSnapshot:null,
+  view:{scale:1,tx:0,ty:0}
+};
 const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
 
@@ -89,6 +114,55 @@ function roundHalf(n){ return Math.round(n*2)/2; }
 function formatFeetInches(totalIn){ const inches=Math.round(totalIn); const ft=Math.floor(inches/12); const rem=inches%12;
   if(ft<=0) return `${rem}"`; if(rem===0) return `${ft}'`; return `${ft}'${rem}"`; }
 
+function _trimZeros(s){ return String(s).replace(/\.0+$/,"" ).replace(/(\.\d*?)0+$/,"$1"); }
+function formatMetricLabel(v){
+  const n=Number(v||0);
+  if(n<1000) return `${_trimZeros(n.toFixed(1))}mm`;
+  if(n<9999) return `${_trimZeros((n/10).toFixed(1))}cm`;
+  return `${_trimZeros((n/1000).toFixed(2))}m`;
+}
+function formatLinear(v){
+  return state.units==="metric" ? formatMetricLabel(v) : formatFeetInches(v);
+}
+function inputUnitLabel(){ return state.units==="metric" ? "mm" : "in"; }
+
+const GRID_SIZES_IMPERIAL=[
+  {v:3,  label:'3" — Trim & molding detail'},
+  {v:4,  label:'4" — Architectural base module'},
+  {v:6,  label:'6" — Half-foot / tile & cabinet'},
+  {v:8,  label:'8" — Brick & CMU block coursing'},
+  {v:12, label:'12" — One foot / floor tile'},
+  {v:16, label:'16" — Standard stud spacing'},
+  {v:18, label:'18" — Upper cabinet depth'},
+  {v:24, label:'24" — Alternate stud / 2 feet'},
+  {v:30, label:'30" — Door & appliance width'},
+  {v:36, label:'36" — Three feet / countertop'},
+  {v:48, label:'48" — Panel / plywood sheet'},
+  {v:96, label:'96" — Eight feet / full sheet'}
+];
+
+const GRID_SIZES_METRIC=[
+  {v:10,   label:'10mm — Fine detail'},
+  {v:50,   label:'50mm — Half-module'},
+  {v:100,  label:'100mm — Fine detail / base module'},
+  {v:200,  label:'200mm — Half-stud reference'},
+  {v:400,  label:'400mm — Stud spacing (heavy/UK)'},
+  {v:600,  label:'600mm — Stud spacing (standard EU)'},
+  {v:625,  label:'625mm — Precise DIN module'},
+  {v:1200, label:'1200mm — Sheet goods width'},
+  {v:2400, label:'2400mm — Sheet goods height'}
+];
+
+function gridOptions(){
+  return state.units==="metric" ? GRID_SIZES_METRIC : GRID_SIZES_IMPERIAL;
+}
+function gridMajorMultiple(minor){
+  const opts=gridOptions().map(o=>o.v);
+  if(opts.includes(minor*4)) return 4;
+  if(opts.includes(minor*5)) return 5;
+  return 5;
+}
+
 function hsvToRgb(h,s,v){ let r,g,b; let i=Math.floor(h*6); let f=h*6-i; let p=v*(1-s); let q=v*(1-f*s); let t=v*(1-(1-f)*s);
   switch(i%6){case 0:r=v,g=t,b=p;break;case 1:r=q,g=v,b=p;break;case 2:r=p,g=v,b=t;break;case 3:r=p,g=q,b=v;break;case 4:r=t,g=p,b=v;break;case 5:r=v,g=p,b=q;break;}
   return {r:Math.round(r*255),g:Math.round(g*255),b:Math.round(b*255)}; }
@@ -147,7 +221,21 @@ function markerAbsPos(objNW, obj, corner){
 
 function oppositeCorner(c){ return c==="NW"?"SE":c==="SE"?"NW":c==="NE"?"SW":"NE"; }
 function setStatus(msg){ const el=document.getElementById("storageStatus"); if(el) el.textContent=msg; }
-function saveApp(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(APP)); setStatus("Storage: saved"); } catch { setStatus("Storage: failed to save"); } }
+function saveApp(){
+  try{
+    if(!APP) return;
+    APP.ui = {
+      ...(APP.ui||{}),
+      ppi: state.ppi,
+      units: state.units,
+      grid: JSON.parse(JSON.stringify(state.grid))
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(APP));
+    setStatus("Storage: saved");
+  } catch {
+    setStatus("Storage: failed to save");
+  }
+}
 /**
  * Re-inflate all fields that the v6 JSON exporter strips for compactness.
  * Safe to call on both old (pre-v6) and v6+ payloads — already-present values
@@ -288,11 +376,11 @@ const ROOM_FIELDS=[
   {key:"name",label:"Name",kind:"text"},
   {key:"description",label:"Description",kind:"textarea"},
   {key:"corner",label:"Corner",kind:"select",options:["NW","NE","SW","SE"]},
-  {key:"xIn",label:"X Coordinate (in)",kind:"number"},
-  {key:"yIn",label:"Y Coordinate (in)",kind:"number"},
-  {key:"wIn",label:"Width (in)",kind:"number"},
-  {key:"hIn",label:"Length (in)",kind:"number"},
-  {key:"heightIn",label:"Height (in)",kind:"number"},
+  {key:"xIn",label:"X Coordinate",unit:true,kind:"number"},
+  {key:"yIn",label:"Y Coordinate",unit:true,kind:"number"},
+  {key:"wIn",label:"Width",unit:true,kind:"number"},
+  {key:"hIn",label:"Length",unit:true,kind:"number"},
+  {key:"heightIn",label:"Height",unit:true,kind:"number"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
@@ -303,11 +391,11 @@ const ITEM_FIELDS=[
   {key:"name",label:"Name",kind:"text"},
   {key:"description",label:"Description",kind:"textarea"},
   {key:"corner",label:"Corner",kind:"select",options:["NW","NE","SW","SE"]},
-  {key:"xIn",label:"X Coordinate (in)",kind:"number"},
-  {key:"yIn",label:"Y Coordinate (in)",kind:"number"},
-  {key:"wIn",label:"Width (in)",kind:"number"},
-  {key:"hIn",label:"Length (in)",kind:"number"},
-  {key:"heightIn",label:"Height (in)",kind:"number"},
+  {key:"xIn",label:"X Coordinate",unit:true,kind:"number"},
+  {key:"yIn",label:"Y Coordinate",unit:true,kind:"number"},
+  {key:"wIn",label:"Width",unit:true,kind:"number"},
+  {key:"hIn",label:"Length",unit:true,kind:"number"},
+  {key:"heightIn",label:"Height",unit:true,kind:"number"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
@@ -332,7 +420,8 @@ function buildSelectedForm(){
   const fields = state.selected.kind==="room" ? ROOM_FIELDS : ITEM_FIELDS;
   for(const f of fields){
     const box=document.createElement("div"); box.className="field";
-    const lab=document.createElement("label"); lab.textContent=f.label;
+    const lab=document.createElement("label");
+    lab.textContent = f.unit ? `${f.label} (${inputUnitLabel()})` : f.label;
     if(f.kind==="color"){
       const v=obj?.[f.key]??"";
       const row=document.createElement("div"); row.className="colorRow";
@@ -377,7 +466,7 @@ function buildSelectedForm(){
     const calc=document.createElement("div");
     calc.className="field";
     calc.style.gridColumn="1/-1";
-    calc.innerHTML=`<label>Area / Perimeter</label><div class="subtle">Area: <strong style="color:var(--text);">${escapeXml(formatSqFt(areaIn2))} ft²</strong> (${escapeXml(Math.round(areaIn2).toString())} in²) &nbsp;·&nbsp; Perimeter: <strong style="color:var(--text);">${escapeXml(formatFeetInches(perimIn))}</strong> (${escapeXml(Math.round(perimIn).toString())} in)</div>`;
+    calc.innerHTML=`<div class="subtle">Area: <strong style="color:var(--text);">${escapeXml(formatSqFt(areaIn2))} ft²</strong> (${escapeXml(Math.round(areaIn2).toString())} in²) &nbsp;·&nbsp; Perimeter: <strong style="color:var(--text);">${escapeXml(formatLinear(perimIn))}</strong> (${escapeXml(Math.round(perimIn).toString())} ${escapeXml(inputUnitLabel())})</div>`;
     wrap.appendChild(calc);
   }
   state.selectedSnapshot=JSON.parse(JSON.stringify(obj));
@@ -765,15 +854,15 @@ function buildConfigForm(){
     grid.appendChild(fa);
 
     const defW=document.createElement("div"); defW.className="field";
-    defW.innerHTML=`<label>Default Width (in)</label><input id="cfg_${id}_defW" type="number" step="0.5" value="${escapeXml(st.defaultWIn ?? 0)}" />`;
+    defW.innerHTML=`<label>Default Width (${escapeXml(inputUnitLabel())})</label><input id="cfg_${id}_defW" type="number" step="0.5" value="${escapeXml(st.defaultWIn ?? 0)}" />`;
     grid.appendChild(defW);
 
     const defH=document.createElement("div"); defH.className="field";
-    defH.innerHTML=`<label>Default Length (in)</label><input id="cfg_${id}_defH" type="number" step="0.5" value="${escapeXml(st.defaultHIn ?? 0)}" />`;
+    defH.innerHTML=`<label>Default Length (${escapeXml(inputUnitLabel())})</label><input id="cfg_${id}_defH" type="number" step="0.5" value="${escapeXml(st.defaultHIn ?? 0)}" />`;
     grid.appendChild(defH);
 
     const defZ=document.createElement("div"); defZ.className="field";
-    defZ.innerHTML=`<label>Default Height (in)</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" />`;
+    defZ.innerHTML=`<label>Default Height (${escapeXml(inputUnitLabel())})</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" />`;
     grid.appendChild(defZ);
 
     body.appendChild(grid);
@@ -1064,6 +1153,21 @@ function computeFloorBoundsIn(floor){
   };
 }
 
+function computeHouseViewportIn(floors){
+  const padIn=20;
+  let maxSpanW=0, maxSpanH=0;
+  for(const f of (floors||[])){
+    const b=computeFloorBoundsIn(f);
+    maxSpanW=Math.max(maxSpanW, b.spanW||0);
+    maxSpanH=Math.max(maxSpanH, b.spanH||0);
+  }
+  return {
+    padIn,
+    width: maxSpanW + padIn*2,
+    height: maxSpanH + padIn*2
+  };
+}
+
 function svgPoint(svg,clientX,clientY){
   const pt=svg.createSVGPoint(); pt.x=clientX; pt.y=clientY;
   const ctm=svg.getScreenCTM(); return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};
@@ -1183,6 +1287,93 @@ function zoomToFitHeight(){
   });
 }
 
+function buildGridGroup(widthPx,heightPx,oxIn,oyIn){
+  const minorIn=Number(state.grid.minorStep||0);
+  if(!(minorIn>0)) return null;
+  const majorMul=gridMajorMultiple(minorIn);
+  const majorIn=minorIn*majorMul;
+
+  const minorStepPx=inToPx(minorIn);
+  const majorStepPx=inToPx(majorIn);
+  if(!(minorStepPx>0) || !(majorStepPx>0)) return null;
+
+  const oxPx=inToPx(oxIn||0);
+  const oyPx=inToPx(oyIn||0);
+  const x0Minor=((oxPx%minorStepPx)+minorStepPx)%minorStepPx;
+  const y0Minor=((oyPx%minorStepPx)+minorStepPx)%minorStepPx;
+  const x0Major=((oxPx%majorStepPx)+majorStepPx)%majorStepPx;
+  const y0Major=((oyPx%majorStepPx)+majorStepPx)%majorStepPx;
+
+  const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.setAttribute("class","gridLayer");
+  const minorColor=state.grid.minorColor||"#ffffff";
+  const majorColor=state.grid.majorColor||"#ffffff";
+  const minorOpacity=clamp(Number(state.grid.minorOpacity),0,1);
+  const majorOpacity=clamp(Number(state.grid.majorOpacity),0,1);
+
+  const addLine=(x1,y1,x2,y2,color,op)=>{
+    const ln=document.createElementNS("http://www.w3.org/2000/svg","line");
+    ln.setAttribute("x1",x1); ln.setAttribute("y1",y1);
+    ln.setAttribute("x2",x2); ln.setAttribute("y2",y2);
+    ln.setAttribute("stroke",color);
+    ln.setAttribute("stroke-opacity",String(op));
+    ln.setAttribute("stroke-width","1");
+    g.appendChild(ln);
+  };
+  const addDot=(x,y,r,color,op)=>{
+    const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx",x); c.setAttribute("cy",y);
+    c.setAttribute("r",r);
+    c.setAttribute("fill",color);
+    c.setAttribute("fill-opacity",String(op));
+    g.appendChild(c);
+  };
+
+  if(state.grid.style==="dot"){
+    const rMinor=1;
+    const rMajor=1.6;
+
+    // Major dots (always)
+    for(let x=x0Major; x<=widthPx+0.001; x+=majorStepPx){
+      for(let y=y0Major; y<=heightPx+0.001; y+=majorStepPx){
+        addDot(x,y,rMajor,majorColor,majorOpacity);
+      }
+    }
+
+    // Minor dots (optional)
+    if(state.grid.showMinor){
+      for(let x=x0Minor; x<=widthPx+0.001; x+=minorStepPx){
+        for(let y=y0Minor; y<=heightPx+0.001; y+=minorStepPx){
+          // Skip dots that land exactly on a major intersection
+          const isMajorX=Math.abs(((x-x0Major)%majorStepPx+majorStepPx)%majorStepPx) < 0.001;
+          const isMajorY=Math.abs(((y-y0Major)%majorStepPx+majorStepPx)%majorStepPx) < 0.001;
+          if(isMajorX && isMajorY) continue;
+          addDot(x,y,rMinor,minorColor,minorOpacity);
+        }
+      }
+    }
+  } else {
+    // Major lines (always)
+    for(let x=x0Major; x<=widthPx+0.001; x+=majorStepPx) addLine(x,0,x,heightPx,majorColor,majorOpacity);
+    for(let y=y0Major; y<=heightPx+0.001; y+=majorStepPx) addLine(0,y,widthPx,y,majorColor,majorOpacity);
+
+    // Minor lines (optional)
+    if(state.grid.showMinor){
+      for(let x=x0Minor; x<=widthPx+0.001; x+=minorStepPx){
+        const isMajor=Math.abs(((x-x0Major)%majorStepPx+majorStepPx)%majorStepPx) < 0.001;
+        if(isMajor) continue;
+        addLine(x,0,x,heightPx,minorColor,minorOpacity);
+      }
+      for(let y=y0Minor; y<=heightPx+0.001; y+=minorStepPx){
+        const isMajor=Math.abs(((y-y0Major)%majorStepPx+majorStepPx)%majorStepPx) < 0.001;
+        if(isMajor) continue;
+        addLine(0,y,widthPx,y,minorColor,minorOpacity);
+      }
+    }
+  }
+  return g;
+}
+
 function render(){
   renderCounts();
   const wrap=document.getElementById("canvasWrap");
@@ -1190,24 +1381,35 @@ function render(){
   const inner=document.createElement("div"); inner.id="canvasInner";
   inner.style.transform=`translate(${state.view.tx}px, ${state.view.ty}px) scale(${state.view.scale})`;
   inner.style.transformOrigin="0 0";
+
+  const viewport=computeHouseViewportIn(HOUSE.floors);
+  const vpWidthPx=inToPx(viewport.width);
+  const vpHeightPx=inToPx(viewport.height);
+
   for(const floor of HOUSE.floors){
     if(!state.visibleFloors.has(floor.id)) continue;
     const bounds=computeFloorBoundsIn(floor);
     const ox=bounds.offsetXIn||0, oy=bounds.offsetYIn||0;
     const fx=(xIn)=>inToPx((xIn||0)+ox);
     const fy=(yIn)=>inToPx((yIn||0)+oy);
-    const widthPx=inToPx(bounds.width), heightPx=inToPx(bounds.height);
+    const widthPx=vpWidthPx, heightPx=vpHeightPx;
 
     const block=document.createElement("div"); block.className="floorBlock";
     const header=document.createElement("div"); header.className="floorHeader";
     const totals=floorTotals(floor);
-    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatFeetInches(bounds.spanW ?? bounds.width))} × ${escapeXml(formatFeetInches(bounds.spanH ?? bounds.height))} · Area ${escapeXml(formatSqFt(totals.areaIn2))} ft² · Perim ${escapeXml(formatFeetInches(totals.perimIn))}</div>`;
+    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatLinear(bounds.spanW ?? bounds.width))} × ${escapeXml(formatLinear(bounds.spanH ?? bounds.height))} · Area ${escapeXml(formatSqFt(totals.areaIn2))} ft² · Perim ${escapeXml(formatLinear(totals.perimIn))}</div>`;
 
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.classList.add("floorSvg");
     svg.dataset.floorId=floor.id;
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
+
+    // Grid (underlay)
+    if(state.grid.enabled){
+      const gridGroup=buildGridGroup(widthPx,heightPx,ox,oy);
+      if(gridGroup) svg.appendChild(gridGroup);
+    }
     // Label group — appended last so labels always render above all objects
     const labelGroup=document.createElementNS("http://www.w3.org/2000/svg","g");
     labelGroup.setAttribute("class","labelLayer");
@@ -1263,7 +1465,7 @@ function render(){
         t.setAttribute("x",x+w/2); t.setAttribute("y",y+h/2); t.setAttribute("class","roomLabel");
         const t1=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t1.setAttribute("x",x+w/2); t1.textContent=room.name;
         const t2=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t2.setAttribute("x",x+w/2); t2.setAttribute("dy","14");
-        t2.textContent=`(${formatFeetInches(room.wIn)} × ${formatFeetInches(room.hIn)})`;
+        t2.textContent=`(${formatLinear(room.wIn)} × ${formatLinear(room.hIn)})`;
         t.appendChild(t1); t.appendChild(t2);
         labelGroup.appendChild(t);
       }
@@ -1327,7 +1529,7 @@ function render(){
             t.setAttribute("x",x+w+inToPx(3)); t.setAttribute("y",y); t.setAttribute("class","itemLabel");
             const t1=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t1.setAttribute("x",x+w+inToPx(3)); t1.textContent=it.name;
             const t2=document.createElementNS("http://www.w3.org/2000/svg","tspan"); t2.setAttribute("x",x+w+inToPx(3)); t2.setAttribute("dy","13");
-            t2.textContent=`(${formatFeetInches(it.wIn)} × ${formatFeetInches(it.hIn)})`;
+            t2.textContent=`(${formatLinear(it.wIn)} × ${formatLinear(it.hIn)})`;
             t.appendChild(t1); t.appendChild(t2);
             labelGroup.appendChild(t);
           }
@@ -1353,12 +1555,99 @@ function buildAll(){
   buildLabelToggles();
   buildConfigForm();
   refreshExportFormatSelect();
+  syncViewPanelUI();
+}
+
+function rebuildGridSizeOptions(){
+  const sel=document.getElementById("gridSize");
+  if(!sel) return;
+  const opts=gridOptions();
+  sel.innerHTML="";
+  for(const o of opts){
+    const op=document.createElement("option");
+    op.value=String(o.v);
+    op.textContent=o.label;
+    sel.appendChild(op);
+  }
+  // Ensure current selection is valid
+  const values=opts.map(o=>o.v);
+  if(!values.includes(Number(state.grid.minorStep))) state.grid.minorStep=values[0]||DEFAULT_UI.grid.minorStep;
+  sel.value=String(state.grid.minorStep);
+}
+
+function syncViewPanelUI(){
+  const ppi=document.getElementById("ppi");
+  const ppiValue=document.getElementById("ppiValue");
+  if(ppi){ ppi.value=String(state.ppi); }
+  if(ppiValue){ ppiValue.textContent=String(state.ppi); }
+  const uImp=document.getElementById("unitsImperial");
+  const uMet=document.getElementById("unitsMetric");
+  if(uImp) uImp.checked = state.units==="imperial";
+  if(uMet) uMet.checked = state.units==="metric";
+  const ge=document.getElementById("gridEnabled");
+  if(ge) ge.checked=!!state.grid.enabled;
+  const gs=document.getElementById("gridStyle");
+  if(gs) gs.value=state.grid.style;
+  rebuildGridSizeOptions();
+  const gm=document.getElementById("gridShowMinor");
+  if(gm) gm.checked=!!state.grid.showMinor;
+  const gmc=document.getElementById("gridMinorColor");
+  if(gmc) gmc.value=state.grid.minorColor||"#ffffff";
+  const gMaj=document.getElementById("gridMajorColor");
+  if(gMaj) gMaj.value=state.grid.majorColor||"#ffffff";
+  const gmo=document.getElementById("gridMinorOpacity");
+  if(gmo) gmo.value=String(state.grid.minorOpacity ?? DEFAULT_UI.grid.minorOpacity);
+  const gMajo=document.getElementById("gridMajorOpacity");
+  if(gMajo) gMajo.value=String(state.grid.majorOpacity ?? DEFAULT_UI.grid.majorOpacity);
+}
+
+function cycleGridSize(dir){
+  const opts=gridOptions().map(o=>o.v);
+  if(!opts.length) return;
+  const cur=Number(state.grid.minorStep);
+  let idx=opts.indexOf(cur);
+  if(idx<0){
+    // choose closest
+    let best=0, bestD=Infinity;
+    for(let i=0;i<opts.length;i++){ const d=Math.abs(opts[i]-cur); if(d<bestD){bestD=d; best=i;} }
+    idx=best;
+  }
+  idx=clamp(idx+dir,0,opts.length-1);
+  state.grid.minorStep=opts[idx];
+  syncViewPanelUI();
+  render();
+  saveApp();
 }
 
 function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
   ppi.addEventListener("input",()=>{state.ppi=parseInt(ppi.value,10); ppiValue.textContent=String(state.ppi); render(); saveApp();});
+
+  // ── Units (label mode only) ───────────────────────────────────────────
+  const uImp=document.getElementById("unitsImperial");
+  const uMet=document.getElementById("unitsMetric");
+  function applyUnits(u){
+    state.units=u;
+    // Rebuild labels that contain unit text and refresh grid options
+    rebuildGridSizeOptions();
+    buildSelectedForm();
+    buildConfigForm();
+    render();
+    saveApp();
+  }
+  uImp?.addEventListener("change",()=>{ if(uImp.checked) applyUnits("imperial"); });
+  uMet?.addEventListener("change",()=>{ if(uMet.checked) applyUnits("metric"); });
+
+  // ── Grid UI ───────────────────────────────────────────────────────────
+  document.getElementById("gridEnabled")?.addEventListener("change",(ev)=>{ state.grid.enabled=!!ev.target.checked; render(); saveApp(); });
+  document.getElementById("gridStyle")?.addEventListener("change",(ev)=>{ state.grid.style=String(ev.target.value||"line"); render(); saveApp(); });
+  document.getElementById("gridShowMinor")?.addEventListener("change",(ev)=>{ state.grid.showMinor=!!ev.target.checked; render(); saveApp(); });
+  document.getElementById("gridMinorColor")?.addEventListener("input",(ev)=>{ state.grid.minorColor=String(ev.target.value||"#ffffff"); render(); saveApp(); });
+  document.getElementById("gridMajorColor")?.addEventListener("input",(ev)=>{ state.grid.majorColor=String(ev.target.value||"#ffffff"); render(); saveApp(); });
+  document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); saveApp(); });
+  document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); saveApp(); });
+  document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); saveApp(); });
 
   document.getElementById("structureSelect").addEventListener("change",(e)=>setActiveStructure(e.target.value));
   document.getElementById("structureNew").addEventListener("click",(e)=>{e.preventDefault(); newStructure();});
@@ -1400,10 +1689,9 @@ function wire(){
     const editable=tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable;
     if(editable) return;
 
-    // ── New / Open / Save / Print ─────────────────────────────────────────
+    // ── Open / Save / Print ─────────────────────────────────────────
     if(ev.ctrlKey||ev.metaKey){
       const k=String(ev.key||"");
-      if(k==="n"||k==="N"){ ev.preventDefault(); newStructure(); return; }
       if(k==="o"||k==="O"){ ev.preventDefault();
         const sel=document.getElementById("exportFormat");
         if(sel && sel.value!=="json"){ sel.value="json"; sel.dispatchEvent(new Event("change")); }
@@ -1440,6 +1728,26 @@ function wire(){
       return;
     }
 
+    // ── Grid shortcuts ────────────────────────────────────────────────────
+    if(ev.shiftKey && (ev.key==="g"||ev.key==="G"||ev.key==="'"||ev.key==='"')){
+      ev.preventDefault();
+      state.grid.enabled=!state.grid.enabled;
+      syncViewPanelUI();
+      render();
+      saveApp();
+      return;
+    }
+    if(ev.shiftKey && (ev.key==="="||ev.key==="+")){
+      ev.preventDefault();
+      cycleGridSize(1);
+      return;
+    }
+    if(ev.shiftKey && (ev.key==="-"||ev.key==="_")){
+      ev.preventDefault();
+      cycleGridSize(-1);
+      return;
+    }
+
     // ── Zoom to Selection / Fit Width / Fit Height ────────────────────────
     if(ev.shiftKey && (ev.code==="Digit2" || ev.key==="@")){
       ev.preventDefault();
@@ -1456,7 +1764,12 @@ function wire(){
       zoomToFitHeight();
       return;
     }
-
+    if(ev.shiftKey && ev.key==="n"||ev.key==="N"){ 
+	  ev.preventDefault();
+	  newStructure();
+	  return; 
+	}
+	
     // ── Delete / Insert ───────────────────────────────────────────────────
     if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); return; }
     if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); return; }
@@ -1638,6 +1951,17 @@ async function initApp(forceSeed=false){
   ACTIVE=APP.structures.find(s=>s.id===activeId) || APP.structures[0];
   APP.activeId=ACTIVE.id;
   HOUSE=ACTIVE.house;
+
+  // Restore UI settings (if present)
+  const ui={...DEFAULT_UI, ...(APP.ui||{})};
+  state.ppi = clamp(parseInt(ui.ppi,10)||DEFAULT_UI.ppi, 1, 10);
+  state.units = (ui.units==="metric") ? "metric" : "imperial";
+  state.grid = {...DEFAULT_UI.grid, ...(ui.grid||{})};
+  if(state.grid.minorStep == null) state.grid.minorStep = DEFAULT_UI.grid.minorStep;
+  if(!["line","dot"].includes(state.grid.style)) state.grid.style = DEFAULT_UI.grid.style;
+  state.grid.minorOpacity = clamp(Number(state.grid.minorOpacity),0,1);
+  state.grid.majorOpacity = clamp(Number(state.grid.majorOpacity),0,1);
+
   if(!ACTIVE.types) ACTIVE.types={"Room":genDefaultStyle(0)};
   if(!ACTIVE.typeOrder) ACTIVE.typeOrder=["Room",...Object.keys(ACTIVE.types).filter(t=>t!=="Room")];
   if(!ACTIVE.typeOrder.includes("Room")) ACTIVE.typeOrder.unshift("Room");

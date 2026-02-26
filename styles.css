@@ -44,6 +44,7 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 .selected-stroke{stroke:var(--accent)!important;filter:drop-shadow(0 0 6px rgba(106,166,255,.55))}
 .roomLabel{font-size:12px;fill:var(--text);paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:3px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
 .itemLabel{font-size:11px;fill:var(--text);paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:3px;text-anchor:start;dominant-baseline:hanging;pointer-events:none}
+.gridLayer{pointer-events:none}
 .floorRow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
 .topbar{display:grid;grid-template-columns:1fr;gap:8px;margin:0 0 10px}
 .topbar .line{display:flex;gap:8px;align-items:center}
@@ -85,6 +86,8 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 .sf-h44{height:44px!important}
 .sf-alignCenter{align-items:center!important}
 .sf-justifyStart{justify-content:flex-start!important}
+.sf-radio{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:11px}
+.sf-radio input{accent-color:var(--accent)}
 
 /* ── Help / About panel ───────────────────────────────────── */
 .helpBody{font-size:12px;line-height:1.5;color:var(--text)}

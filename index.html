@@ -36,14 +36,8 @@ User interface
   - Configuration for per-type defaults (colors, stroke width, default dimensions)
   - Add New Item workflow (type + target floor/room as applicable)
   - Export / Import tools
-
-Behavior
-- Clicking an element selects it and populates the Selected editor.
-- Apply commits edits to the active Structure data; Reset restores the selection snapshot.
-- Duplicate creates a copy with a new GUID-based ID.
-- Deletes remove the selected element or floor (with safeguards to keep at least one floor/structure).
-- Data is persisted in browser storage so layouts re-load on next visit.
-
+  - Help / About
+  
 Data model (high-level)
 - APP
   - structures[]
@@ -101,9 +95,70 @@ Notes
     </details>
 
     <details class="panel" open>
-      <summary><span class="sumTitle">Scale</span><span class="sumRight"><span><strong id="ppiValue">3</strong> px/in</span><span class="chev"></span></span></summary>
+      <summary><span class="sumTitle">View</span><span class="sumRight"><span><strong id="ppiValue">3</strong> px/in</span><span class="chev"></span></span></summary>
       <div class="panelBody">
-        <input id="ppi" type="range" min="1" max="10" step="1" value="3" class="sf-rangeFull sf-mt10" />
+        <div class="grid2">
+          <div class="field">
+            <label>Units</label>
+            <div class="row sf-gap8">
+              <label class="sf-radio"><input type="radio" name="units" id="unitsImperial" value="imperial" checked> Imperial</label>
+              <label class="sf-radio"><input type="radio" name="units" id="unitsMetric" value="metric"> Metric</label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Scale</label>
+            <input id="ppi" type="range" min="1" max="10" step="1" value="3" class="sf-rangeFull" />
+          </div>
+        </div>
+
+        <div class="helpDivider sf-mt10"></div>
+
+        <div class="grid2">
+          <div class="checkbox sf-h44 sf-alignCenter sf-justifyStart">
+            <input id="gridEnabled" type="checkbox" />
+            <div>Show Grid</div>
+          </div>
+		  <div class="checkbox sf-h44 sf-alignCenter sf-justifyStart">
+            <input id="gridShowMinor" type="checkbox" checked />
+            <div>Show minor</div>
+          </div>
+        </div>
+
+        <div class="grid2 sf-mt10">
+          <div class="field">
+            <label>Grid size</label>
+            <select id="gridSize"></select>
+          </div>
+		  <div class="field">
+            <label>Grid type</label>
+            <select id="gridStyle">
+              <option value="line">Line</option>
+              <option value="dot">Dot</option>
+            </select>
+          </div>		  
+        </div>
+
+        <div class="grid2 sf-mt10">
+          <div class="field">
+            <label>Minor color</label>
+            <input id="gridMinorColor" type="color" value="#ffffff" />
+          </div>
+          <div class="field">
+            <label>Major color</label>
+            <input id="gridMajorColor" type="color" value="#ffffff" />
+          </div>
+        </div>
+
+        <div class="grid2 sf-mt10">
+          <div class="field">
+            <label>Minor opacity</label>
+            <input id="gridMinorOpacity" type="range" min="0" max="1" step="0.01" value="0.18" class="sf-rangeFull" />
+          </div>
+          <div class="field">
+            <label>Major opacity</label>
+            <input id="gridMajorOpacity" type="range" min="0" max="1" step="0.01" value="0.40" class="sf-rangeFull" />
+          </div>
+        </div>
       </div>
     </details>
 
@@ -284,10 +339,6 @@ Notes
               <span class="helpMutedSm">Delete selected object</span>
             </div>
             <div class="helpRow">
-              <span class="helpPill">Ctrl+N</span>
-              <span class="helpMutedSm">New structure</span>
-            </div>
-            <div class="helpRow">
               <span class="helpPill">Ctrl+O</span>
               <span class="helpMutedSm">Open file (import JSON)</span>
             </div>
@@ -299,17 +350,45 @@ Notes
               <span class="helpPill">Ctrl+P</span>
               <span class="helpMutedSm">Collapse panel and print</span>
             </div>
+			<div class="helpRow">
+              <span class="helpPill">Shift+N</span>
+              <span class="helpMutedSm">New structure</span>
+            </div>
             <div class="helpRow">
               <span class="helpPill">Shift+1</span>
-              <span class="helpMutedSm">Zoom to fit</span>
+              <span class="helpMutedSm">Zoom to fit (all)</span>
+            </div>
+            <div class="helpRow">
+              <span class="helpPill">Shift+2</span>
+              <span class="helpMutedSm">Zoom to selection</span>
+            </div>
+            <div class="helpRow">
+              <span class="helpPill">Shift+3</span>
+              <span class="helpMutedSm">Zoom to fit width (scroll top)</span>
+            </div>
+            <div class="helpRow">
+              <span class="helpPill">Shift+4</span>
+              <span class="helpMutedSm">Zoom to fit height (scroll left)</span>
+            </div>			
+            <div class="helpRow">
+              <span class="helpPill">Shift+G / Shift+'</span>
+              <span class="helpMutedSm">Toggle grid</span>
+            </div>
+            <div class="helpRow">
+              <span class="helpPill">Shift+= / Shift++</span>
+              <span class="helpMutedSm">Grid size up</span>
+            </div>
+            <div class="helpRow">
+              <span class="helpPill">Shift+-</span>
+              <span class="helpMutedSm">Grid size down</span>
             </div>
             <div class="helpRow">
               <span class="helpPill">↑↓←→</span>
-              <span class="helpMutedSm">Nudge selected object (1 inch)</span>
+              <span class="helpMutedSm">Nudge selected object</span>
             </div>
             <div class="helpRow">
               <span class="helpPill">⇧ + ↑↓←→</span>
-              <span class="helpMutedSm">Nudge larger step (12 inches)</span>
+              <span class="helpMutedSm">Nudge larger step</span>
             </div>
             <div class="helpRow">
               <span class="helpPill">Esc</span>
