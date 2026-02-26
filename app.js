@@ -17,6 +17,16 @@ const NUDGE_SHIFT_IN  = 12;  // Arrow key nudge – shift step (1 foot)
 // Redo: increment index → restore next snapshot.
 const history={stack:[], index:-1, maxSize:50};
 
+// ── Copy / Cut / Paste clipboard (in-app) ───────────────────────────────────
+// Note: This does NOT integrate with the OS clipboard. It mirrors the
+// familiar shortcuts for in-app object operations.
+const clipboard={ kind:null, data:null, source:{floorId:null, roomId:null} };
+
+// ── View configuration ──────────────────────────────────────────────────────
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 5;
+const ZOOM_TO_FIT_PAD_PX = 24;
+
 function pushHistory(){
   history.stack = history.stack.slice(0, history.index+1);
   history.stack.push({
@@ -375,6 +385,95 @@ function saveSelectedForm(){
   buildAll(); render(); saveApp();
   pushHistory();
 }
+
+function copySelected(){
+  if(!state.selected){ clipboard.kind=null; clipboard.data=null; clipboard.source={floorId:null,roomId:null}; return; }
+  if(state.selected.kind==="room"){
+    const res=findRoom(state.selected.roomId); if(!res) return;
+    clipboard.kind="room";
+    clipboard.data=JSON.parse(JSON.stringify(res.room));
+    clipboard.source={floorId:res.floor.id, roomId:res.room.id};
+  } else {
+    const res=findItem(state.selected.itemId); if(!res) return;
+    // Store an item snapshot plus its NW-relative position within the source room.
+    clipboard.kind="item";
+    clipboard.data={
+      item: JSON.parse(JSON.stringify(res.item)),
+      relNW: normalizeRectRelToRoomPrimary(res.item, res.room)
+    };
+    clipboard.source={floorId:res.floor.id, roomId:res.room.id};
+  }
+}
+
+function cutSelected(){
+  if(!state.selected) return;
+  copySelected();
+  if(state.selected.kind==="room"){
+    const res=findRoom(state.selected.roomId); if(!res) return;
+    res.floor.rooms=res.floor.rooms.filter(r=>r.id!==res.room.id);
+  } else {
+    const res=findItem(state.selected.itemId); if(!res) return;
+    res.room.items=res.room.items.filter(i=>i.id!==res.item.id);
+  }
+  state.selected=null; state.selectedSnapshot=null;
+  buildAll(); render(); saveApp();
+  pushHistory();
+}
+
+function pasteClipboard(){
+  if(!clipboard.kind || !clipboard.data) return;
+
+  // Determine paste target context
+  let targetFloorId=null;
+  let targetRoomId=null;
+  if(state.selected?.kind==="room"){ targetFloorId=state.selected.floorId; targetRoomId=state.selected.roomId; }
+  else if(state.selected?.kind==="item"){ targetFloorId=state.selected.floorId; targetRoomId=state.selected.roomId; }
+  else {
+    // No selection: fall back to clipboard source
+    targetFloorId=clipboard.source.floorId;
+    targetRoomId=clipboard.source.roomId;
+  }
+
+  if(clipboard.kind==="room"){
+    // Room paste behaves like Duplicate.
+    const floor=findFloor(targetFloorId) || findFloor(clipboard.source.floorId);
+    if(!floor){ alert("Select a floor or room first."); return; }
+    const src=clipboard.data;
+    const copy=JSON.parse(JSON.stringify(src));
+    copy.id=guid();
+    copy.name=(copy.name||"Room")+" (Copy)";
+    copy.items=(copy.items||[]).map(it=>{ const c=JSON.parse(JSON.stringify(it)); c.id=guid(); c.roomId=copy.id; return c; });
+    const origNW=normalizeRectAbs(src);
+    const cx=origNW.xIn+src.wIn/2; const cy=origNW.yIn+src.hIn/2;
+    copy.corner="NW"; copy.xIn=cx; copy.yIn=cy;
+    copy.floorId=floor.id;
+    floor.rooms.push(copy);
+    setSelected({kind:"room", floorId:floor.id, roomId:copy.id});
+  } else {
+    // Item paste: paste into selected room or the room that owns the selected item.
+    if(!targetRoomId){ alert("Select a room first (or select an item inside a room)."); return; }
+    const res=findRoom(targetRoomId); if(!res){ alert("Room not found."); return; }
+    const srcItem=clipboard.data.item;
+    const copy=JSON.parse(JSON.stringify(srcItem));
+    copy.id=guid();
+    copy.roomId=res.room.id;
+    copy.name=(copy.name||copy.type)+" (Copy)";
+    // Place copy's NW corner at center of the source item (relative to target room).
+    const origRel=clipboard.data.relNW;
+    const cx=origRel.xIn+(srcItem.wIn||0)/2;
+    const cy=origRel.yIn+(srcItem.hIn||0)/2;
+    copy.corner="NW";
+    setItemFromNW_Rel(copy, res.room, cx, cy);
+    ensureTypeExists(copy.type);
+    applyDefaultsToObj(copy);
+    res.room.items.push(copy);
+    setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
+  }
+
+  buildAll(); render(); saveApp();
+  pushHistory();
+}
+
 function duplicateSelected(){
   if(!state.selected) return;
   if(state.selected.kind==="room"){
@@ -942,6 +1041,27 @@ function updateSelectedXYInputs(obj){
   if(yi) yi.value=String(roundHalf(obj.yIn));
 }
 
+function zoomToFit(){
+  const wrap=document.getElementById("canvasWrap");
+  if(!wrap) return;
+  // Reset view first so we measure the untransformed layout
+  state.view.scale=1; state.view.tx=0; state.view.ty=0;
+  render();
+  requestAnimationFrame(()=>{
+    const inner=document.getElementById("canvasInner");
+    if(!inner) return;
+    const wr=wrap.getBoundingClientRect();
+    const ir=inner.getBoundingClientRect();
+    const availW=Math.max(1, wr.width - ZOOM_TO_FIT_PAD_PX);
+    const availH=Math.max(1, wr.height - ZOOM_TO_FIT_PAD_PX);
+    const s=clamp(Math.min(availW/Math.max(1,ir.width), availH/Math.max(1,ir.height)), ZOOM_MIN, ZOOM_MAX);
+    state.view.scale=s;
+    state.view.tx=(wr.width - ir.width*s)/2;
+    state.view.ty=(wr.height - ir.height*s)/2;
+    render();
+  });
+}
+
 function render(){
   renderCounts();
   const wrap=document.getElementById("canvasWrap");
@@ -1155,6 +1275,46 @@ function wire(){
     const editable=tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable;
     if(editable) return;
 
+    // ── New / Open / Save / Print ─────────────────────────────────────────
+    if(ev.ctrlKey||ev.metaKey){
+      const k=String(ev.key||"");
+      if(k==="n"||k==="N"){ ev.preventDefault(); newStructure(); return; }
+      if(k==="o"||k==="O"){ ev.preventDefault();
+        const sel=document.getElementById("exportFormat");
+        if(sel && sel.value!=="json"){ sel.value="json"; sel.dispatchEvent(new Event("change")); }
+        importAll();
+        return;
+      }
+      if(k==="s"||k==="S"){ ev.preventDefault();
+        const sel=document.getElementById("exportFormat");
+        if(sel && sel.value!=="json"){ sel.value="json"; sel.dispatchEvent(new Event("change")); }
+        exportAll();
+        return;
+      }
+      if(k==="p"||k==="P"){ ev.preventDefault();
+        document.body.classList.add("navCollapsed");
+        setTimeout(()=>window.print(),0);
+        return;
+      }
+    }
+
+    // ── Copy / Cut / Paste ────────────────────────────────────────────────
+    if(ev.ctrlKey||ev.metaKey){
+      const k=String(ev.key||"");
+      if(k==="c"||k==="C"||k==="Insert"){ ev.preventDefault(); copySelected(); return; }
+      if(k==="x"||k==="X"){ ev.preventDefault(); cutSelected(); return; }
+      if(k==="v"||k==="V"){ ev.preventDefault(); pasteClipboard(); return; }
+      if(k==="d"||k==="D"){ ev.preventDefault(); duplicateSelected(); return; }
+    }
+    if(ev.shiftKey && ev.key==="Insert"){ ev.preventDefault(); pasteClipboard(); return; }
+
+    // ── Zoom to Fit ───────────────────────────────────────────────────────
+    if(ev.shiftKey && (ev.code==="Digit1" || ev.key==="!")){
+      ev.preventDefault();
+      zoomToFit();
+      return;
+    }
+
     // ── Delete / Insert ───────────────────────────────────────────────────
     if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); return; }
     if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); return; }
@@ -1364,7 +1524,7 @@ function initPanZoom(){
     const old=state.view.scale;
     const delta=-ev.deltaY;
     const factor=delta>0?1.08:0.92;
-    const ns=clamp(old*factor,0.2,5);
+    const ns=clamp(old*factor,ZOOM_MIN,ZOOM_MAX);
     const wx=(mx-state.view.tx)/old;
     const wy=(my-state.view.ty)/old;
     state.view.scale=ns;
