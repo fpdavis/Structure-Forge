@@ -1033,9 +1033,35 @@ function _setExportImportHint(msg,ms){
 }
 
 function computeFloorBoundsIn(floor){
-  let maxX=0,maxY=0; const pad=20;
-  for(const r of floor.rooms){ const rr=normalizeRectAbs(r); maxX=Math.max(maxX,rr.xIn+rr.wIn); maxY=Math.max(maxY,rr.yIn+rr.hIn); }
-  return {width:maxX+pad,height:maxY+pad};
+  // Bounds are used for rendering the SVG viewport. Keep a consistent padding
+  // around the structure, but do NOT let absolute placement offsets inflate
+  // the displayed width/height in the floor title bar.
+  const padIn=20;
+  let minX=0, minY=0, maxX=0, maxY=0;
+  let has=false;
+  for(const r of (floor.rooms||[])){
+    const rr=normalizeRectAbs(r);
+    const x1=rr.xIn, y1=rr.yIn;
+    const x2=rr.xIn+rr.wIn, y2=rr.yIn+rr.hIn;
+    if(!has){ minX=x1; minY=y1; maxX=x2; maxY=y2; has=true; }
+    else {
+      minX=Math.min(minX,x1); minY=Math.min(minY,y1);
+      maxX=Math.max(maxX,x2); maxY=Math.max(maxY,y2);
+    }
+  }
+  const spanW=has ? Math.max(0, maxX-minX) : 0;
+  const spanH=has ? Math.max(0, maxY-minY) : 0;
+  return {
+    // Render-space width/height (includes padding and shifts negatives into view)
+    width: spanW + padIn*2,
+    height: spanH + padIn*2,
+    // Render-space offsets (inches) applied to all draw coordinates
+    offsetXIn: has ? (-minX + padIn) : padIn,
+    offsetYIn: has ? (-minY + padIn) : padIn,
+    // Structure span (no padding, no placement offset)
+    spanW,
+    spanH
+  };
 }
 
 function svgPoint(svg,clientX,clientY){
@@ -1167,12 +1193,15 @@ function render(){
   for(const floor of HOUSE.floors){
     if(!state.visibleFloors.has(floor.id)) continue;
     const bounds=computeFloorBoundsIn(floor);
+    const ox=bounds.offsetXIn||0, oy=bounds.offsetYIn||0;
+    const fx=(xIn)=>inToPx((xIn||0)+ox);
+    const fy=(yIn)=>inToPx((yIn||0)+oy);
     const widthPx=inToPx(bounds.width), heightPx=inToPx(bounds.height);
 
     const block=document.createElement("div"); block.className="floorBlock";
     const header=document.createElement("div"); header.className="floorHeader";
     const totals=floorTotals(floor);
-    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatFeetInches(bounds.width))} × ${escapeXml(formatFeetInches(bounds.height))} · Area ${escapeXml(formatSqFt(totals.areaIn2))} ft² · Perim ${escapeXml(formatFeetInches(totals.perimIn))}</div>`;
+    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatFeetInches(bounds.spanW ?? bounds.width))} × ${escapeXml(formatFeetInches(bounds.spanH ?? bounds.height))} · Area ${escapeXml(formatSqFt(totals.areaIn2))} ft² · Perim ${escapeXml(formatFeetInches(totals.perimIn))}</div>`;
 
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.classList.add("floorSvg");
@@ -1187,7 +1216,7 @@ function render(){
     for(const room of floor.rooms){
       applyDefaultsToObj(room);
       const rr=normalizeRectAbs(room);
-      const x=inToPx(rr.xIn), y=inToPx(rr.yIn), w=inToPx(rr.wIn), h=inToPx(rr.hIn);
+      const x=fx(rr.xIn), y=fy(rr.yIn), w=inToPx(rr.wIn), h=inToPx(rr.hIn);
       const st=ACTIVE.types.Room;
       const g=document.createElementNS("http://www.w3.org/2000/svg","g");
       const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
@@ -1202,8 +1231,8 @@ function render(){
       const markerSize=clamp(inToPx(4),6,18);
       const mpos=markerAbsPos(rr, room, room.corner);
       const marker=document.createElementNS("http://www.w3.org/2000/svg","rect");
-      marker.setAttribute("x",inToPx(mpos.xIn)-markerSize/2);
-      marker.setAttribute("y",inToPx(mpos.yIn)-markerSize/2);
+      marker.setAttribute("x",fx(mpos.xIn)-markerSize/2);
+      marker.setAttribute("y",fy(mpos.yIn)-markerSize/2);
       marker.setAttribute("width",markerSize); marker.setAttribute("height",markerSize);
       marker.setAttribute("fill",room.cornerColor||st.defaultCornerColor);
       marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
@@ -1249,7 +1278,7 @@ function render(){
           ensureTypeExists(it.type);
           applyDefaultsToObj(it);
           const abs=itemAbsRect(it, room);
-          const x=inToPx(abs.xIn), y=inToPx(abs.yIn), w=inToPx(abs.wIn), h=inToPx(abs.hIn);
+          const x=fx(abs.xIn), y=fy(abs.yIn), w=inToPx(abs.wIn), h=inToPx(abs.hIn);
           const st=ACTIVE.types[type];
 
           const g=document.createElementNS("http://www.w3.org/2000/svg","g");
@@ -1265,8 +1294,8 @@ function render(){
           const markerSize=clamp(inToPx(4),6,18);
           const mpos=markerAbsPos(abs, it, it.corner);
           const marker=document.createElementNS("http://www.w3.org/2000/svg","rect");
-          marker.setAttribute("x",inToPx(mpos.xIn)-markerSize/2);
-          marker.setAttribute("y",inToPx(mpos.yIn)-markerSize/2);
+          marker.setAttribute("x",fx(mpos.xIn)-markerSize/2);
+          marker.setAttribute("y",fy(mpos.yIn)-markerSize/2);
           marker.setAttribute("width",markerSize); marker.setAttribute("height",markerSize);
           marker.setAttribute("fill",it.cornerColor||st.defaultCornerColor);
           marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
