@@ -25,12 +25,10 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 
 ## TODO List
 
-### 2) Core editing enhancements (easy → medium)
+### Core editing enhancements (easy → medium)
 - **Define nomenclature**
   - Standard terms for: structure, floor, room, item/object, type, instance
   - Document canonical coordinate system and corner semantics
-- **Fill Opacity Steps should be .1**
-- **Label z-index should be on top of all objects**
 - **Additional keyboard shortcuts**
 - **Keyboard nudging**
   - Arrow keys
@@ -44,7 +42,7 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - From list to list, or via canvas drop target
 - Autosave support (and conflict handling with localStorage)
 
-### 3) Interaction + UX improvements (medium)
+### Interaction + UX improvements (medium)
 - **Lock/freeze objects to prevent accidental edits**
   - Per-object lock
   - Optional floor-level lock
@@ -59,12 +57,8 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 - **Theme toggle (dark/light) with persisted setting**
 - **Improved User Interface**
   - Layout polish, discoverability, consistent controls
-- **Help pop up**
-  - Quick-start, controls, shortcuts
-- **Credits**
-  - Acknowledge libraries, contributors, inspirations
 
-### 4) Geometry + analysis features (medium → hard)
+### Geometry + analysis features (medium → hard)
 - **Rotation**
   - Rotate items, and optionally rooms
   - Persist rotation and update export logic
@@ -75,7 +69,7 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - Rulers along X/Y axis
   - Optional grid and snap integration
 
-### 5) Advanced object modeling (hard)
+### Advanced object modeling (hard)
 - **Different object shapes**
   - Circle, triangle, pentagon, hexagon, etc.
   - Option: user-defined number of sides from 3 (triangle) to 360 (circle)
