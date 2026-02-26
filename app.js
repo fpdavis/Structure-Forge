@@ -27,6 +27,24 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
 const ZOOM_TO_FIT_PAD_PX = 24;
 
+// ── Area / perimeter helpers ───────────────────────────────────────────────
+const IN2_PER_FT2 = 144;
+function formatSqFt(areaIn2){
+  const ft2=areaIn2/IN2_PER_FT2;
+  const s=ft2.toFixed(1);
+  return s.endsWith(".0") ? s.slice(0,-2) : s;
+}
+function roomAreaIn2(room){ return Math.max(0,(room.wIn||0)*(room.hIn||0)); }
+function roomPerimIn(room){ return Math.max(0, 2*((room.wIn||0)+(room.hIn||0))); }
+function floorTotals(floor){
+  let areaIn2=0, perimIn=0;
+  for(const r of (floor.rooms||[])){
+    areaIn2 += roomAreaIn2(r);
+    perimIn += roomPerimIn(r);
+  }
+  return {areaIn2, perimIn};
+}
+
 function pushHistory(){
   history.stack = history.stack.slice(0, history.index+1);
   history.stack.push({
@@ -351,6 +369,16 @@ function buildSelectedForm(){
     input.value=v;
     box.appendChild(lab); box.appendChild(input);
     wrap.appendChild(box);
+  }
+
+  if(state.selected.kind==="room"){
+    const areaIn2=roomAreaIn2(obj);
+    const perimIn=roomPerimIn(obj);
+    const calc=document.createElement("div");
+    calc.className="field";
+    calc.style.gridColumn="1/-1";
+    calc.innerHTML=`<label>Area / Perimeter</label><div class="subtle">Area: <strong style="color:var(--text);">${escapeXml(formatSqFt(areaIn2))} ft²</strong> (${escapeXml(Math.round(areaIn2).toString())} in²) &nbsp;·&nbsp; Perimeter: <strong style="color:var(--text);">${escapeXml(formatFeetInches(perimIn))}</strong> (${escapeXml(Math.round(perimIn).toString())} in)</div>`;
+    wrap.appendChild(calc);
   }
   state.selectedSnapshot=JSON.parse(JSON.stringify(obj));
 }
@@ -1062,6 +1090,73 @@ function zoomToFit(){
   });
 }
 
+function zoomToSelection(){
+  const wrap=document.getElementById("canvasWrap");
+  if(!wrap || !state.selected) return;
+  // Reset view first so we can measure reliably
+  state.view.scale=1; state.view.tx=0; state.view.ty=0;
+  render();
+  requestAnimationFrame(()=>{
+    const inner=document.getElementById("canvasInner");
+    if(!inner) return;
+    const target=document.querySelector(".selected-stroke");
+    if(!target) return;
+
+    const wr=wrap.getBoundingClientRect();
+    const ir=inner.getBoundingClientRect();
+    const br=target.getBoundingClientRect();
+
+    const availW=Math.max(1, wr.width - ZOOM_TO_FIT_PAD_PX);
+    const availH=Math.max(1, wr.height - ZOOM_TO_FIT_PAD_PX);
+    const s=clamp(Math.min(availW/Math.max(1,br.width), availH/Math.max(1,br.height)), ZOOM_MIN, ZOOM_MAX);
+
+    const cx=((br.left+br.right)/2) - ir.left;
+    const cy=((br.top+br.bottom)/2) - ir.top;
+    state.view.scale=s;
+    state.view.tx=(wr.width/2) - (cx*s);
+    state.view.ty=(wr.height/2) - (cy*s);
+    render();
+  });
+}
+
+function zoomToFitWidth(){
+  const wrap=document.getElementById("canvasWrap");
+  if(!wrap) return;
+  state.view.scale=1; state.view.tx=0; state.view.ty=0;
+  render();
+  requestAnimationFrame(()=>{
+    const inner=document.getElementById("canvasInner");
+    if(!inner) return;
+    const wr=wrap.getBoundingClientRect();
+    const ir=inner.getBoundingClientRect();
+    const availW=Math.max(1, wr.width - ZOOM_TO_FIT_PAD_PX);
+    const s=clamp(availW/Math.max(1,ir.width), ZOOM_MIN, ZOOM_MAX);
+    state.view.scale=s;
+    state.view.tx=(wr.width - ir.width*s)/2;
+    state.view.ty=ZOOM_TO_FIT_PAD_PX/2;
+    render();
+  });
+}
+
+function zoomToFitHeight(){
+  const wrap=document.getElementById("canvasWrap");
+  if(!wrap) return;
+  state.view.scale=1; state.view.tx=0; state.view.ty=0;
+  render();
+  requestAnimationFrame(()=>{
+    const inner=document.getElementById("canvasInner");
+    if(!inner) return;
+    const wr=wrap.getBoundingClientRect();
+    const ir=inner.getBoundingClientRect();
+    const availH=Math.max(1, wr.height - ZOOM_TO_FIT_PAD_PX);
+    const s=clamp(availH/Math.max(1,ir.height), ZOOM_MIN, ZOOM_MAX);
+    state.view.scale=s;
+    state.view.tx=ZOOM_TO_FIT_PAD_PX/2;
+    state.view.ty=(wr.height - ir.height*s)/2;
+    render();
+  });
+}
+
 function render(){
   renderCounts();
   const wrap=document.getElementById("canvasWrap");
@@ -1076,7 +1171,8 @@ function render(){
 
     const block=document.createElement("div"); block.className="floorBlock";
     const header=document.createElement("div"); header.className="floorHeader";
-    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatFeetInches(bounds.width))} × ${escapeXml(formatFeetInches(bounds.height))}</div>`;
+    const totals=floorTotals(floor);
+    header.innerHTML=`<div class="floorName">${escapeXml(floor.name)}</div><div class="meta">${escapeXml(formatFeetInches(bounds.width))} × ${escapeXml(formatFeetInches(bounds.height))} · Area ${escapeXml(formatSqFt(totals.areaIn2))} ft² · Perim ${escapeXml(formatFeetInches(totals.perimIn))}</div>`;
 
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.classList.add("floorSvg");
@@ -1312,6 +1408,23 @@ function wire(){
     if(ev.shiftKey && (ev.code==="Digit1" || ev.key==="!")){
       ev.preventDefault();
       zoomToFit();
+      return;
+    }
+
+    // ── Zoom to Selection / Fit Width / Fit Height ────────────────────────
+    if(ev.shiftKey && (ev.code==="Digit2" || ev.key==="@")){
+      ev.preventDefault();
+      zoomToSelection();
+      return;
+    }
+    if(ev.shiftKey && (ev.code==="Digit3" || ev.key==="#")){
+      ev.preventDefault();
+      zoomToFitWidth();
+      return;
+    }
+    if(ev.shiftKey && (ev.code==="Digit4" || ev.key==="$")){
+      ev.preventDefault();
+      zoomToFitHeight();
       return;
     }
 
