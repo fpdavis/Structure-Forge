@@ -3,8 +3,49 @@ const STORAGE_KEY="house-layout-viewer:v6";
 let APP=null, ACTIVE=null, HOUSE=null;
 
 const state={ ppi:3, visibleFloors:new Set(), visibleTypes:new Set(), visibleLabels:{}, selected:null, selectedSnapshot:null, view:{scale:1,tx:0,ty:0} };
-const drag={active:false, kind:null, roomId:null, itemId:null, svg:null, startPt:null, startNW:null, startRect:null, fixedPt:null, raf:false};
+const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
+
+// ── Nudge configuration (inches) ─────────────────────────────────────────────
+const NUDGE_NORMAL_IN = 1;   // Arrow key nudge – normal step
+const NUDGE_SHIFT_IN  = 12;  // Arrow key nudge – shift step (1 foot)
+
+// ── Undo / Redo history ───────────────────────────────────────────────────────
+// Push-after model: pushHistory() is called AFTER every mutation so that
+// stack[index] always equals the current live state.
+// Undo: decrement index → restore previous snapshot (one action back).
+// Redo: increment index → restore next snapshot.
+const history={stack:[], index:-1, maxSize:50};
+
+function pushHistory(){
+  history.stack = history.stack.slice(0, history.index+1);
+  history.stack.push({
+    house: JSON.parse(JSON.stringify(HOUSE)),
+    selected: state.selected ? JSON.parse(JSON.stringify(state.selected)) : null
+  });
+  if(history.stack.length > history.maxSize) history.stack.shift();
+  history.index = history.stack.length - 1;
+}
+
+function _applyHistorySnap(snap){
+  ACTIVE.house = JSON.parse(JSON.stringify(snap.house));
+  HOUSE = ACTIVE.house;
+  state.selected = snap.selected ? JSON.parse(JSON.stringify(snap.selected)) : null;
+  state.selectedSnapshot = null;
+  buildAll(); render(); saveApp();
+}
+
+function undoHistory(){
+  if(history.index <= 0) return;
+  history.index--;
+  _applyHistorySnap(history.stack[history.index]);
+}
+
+function redoHistory(){
+  if(history.index >= history.stack.length-1) return;
+  history.index++;
+  _applyHistorySnap(history.stack[history.index]);
+}
 
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const inToPx=(inch)=>inch*state.ppi;
@@ -311,6 +352,7 @@ function resetSelectedForm(){
   if(state.selected.kind==="room"){ const res=findRoom(state.selected.roomId); if(!res) return; Object.assign(res.room, JSON.parse(JSON.stringify(state.selectedSnapshot))); }
   else { const res=findItem(state.selected.itemId); if(!res) return; Object.assign(res.item, JSON.parse(JSON.stringify(state.selectedSnapshot))); }
   buildSelectedForm(); render(); saveApp();
+  pushHistory();
 }
 function saveSelectedForm(){
   if(!state.selected) return;
@@ -331,6 +373,7 @@ function saveSelectedForm(){
     applyDefaultsToObj(it);
   }
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function duplicateSelected(){
   if(!state.selected) return;
@@ -355,6 +398,7 @@ function duplicateSelected(){
     setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
   }
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function deleteSelected(){
   if(!state.selected){ alert("No selection."); return; }
@@ -369,13 +413,14 @@ function deleteSelected(){
   }
   state.selected=null; state.selectedSnapshot=null;
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 
 function updateFloorSummary(){
   const visible=HOUSE.floors.filter(f=>state.visibleFloors.has(f.id)).length;
   const el=document.getElementById("floorSummary"); if(el) el.textContent=`${visible}/${HOUSE.floors.length}`;
 }
-function addFloor(){ const id=guid(); HOUSE.floors.push({id,name:"New Floor",rooms:[]}); state.visibleFloors.add(id); buildAll(); render(); saveApp(); }
+function addFloor(){ const id=guid(); HOUSE.floors.push({id,name:"New Floor",rooms:[]}); state.visibleFloors.add(id); buildAll(); render(); saveApp(); pushHistory(); }
 
 function moveFloor(floorId, delta){
   const idx=HOUSE.floors.findIndex(f=>f.id===floorId);
@@ -385,6 +430,7 @@ function moveFloor(floorId, delta){
   const [f]=HOUSE.floors.splice(idx,1);
   HOUSE.floors.splice(tgt,0,f);
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function deleteFloor(floorId){
   const idx=HOUSE.floors.findIndex(f=>f.id===floorId);
@@ -401,6 +447,7 @@ This deletes ${floor.rooms.length} room(s) and all nested items.`)) return;
   HOUSE.floors.splice(idx,1); state.visibleFloors.delete(floorId);
   if(state.visibleFloors.size===0 && HOUSE.floors[0]) state.visibleFloors.add(HOUSE.floors[0].id);
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function buildFloorToggles(){
   const wrap=document.getElementById("floorToggles"); wrap.innerHTML="";
@@ -503,6 +550,7 @@ function deleteType(type){
   state.visibleTypes.delete(type); delete state.visibleLabels[type];
   if(state.selected && state.selected.kind==="item"){ const res=findItem(state.selected.itemId); if(!res){ state.selected=null; state.selectedSnapshot=null; } }
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 
 function buildConfigForm(){
@@ -613,6 +661,7 @@ function resetConfig(){
   state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function saveConfig(){
   // structure name saved with configuration
@@ -682,6 +731,7 @@ function saveConfig(){
   }
 
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 function addType(){
   const raw=document.getElementById("newTypeName")?.value||"";
@@ -695,6 +745,7 @@ function addType(){
   state.visibleLabels[name]=false;
   document.getElementById("newTypeName").value="";
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 
 function populateNewItemSelectors(){
@@ -766,6 +817,7 @@ function addNew(){
     state.visibleFloors.add(floor.id);
     setSelected({kind:"room", floorId:floor.id, roomId:r.id});
     buildAll(); render(); saveApp();
+    pushHistory();
     return;
   }
   let targetRoomId=null;
@@ -780,6 +832,7 @@ function addNew(){
   res.room.items.push(it);
   setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:it.id});
   buildAll(); render(); saveApp();
+  pushHistory();
 }
 
 // --- Exporters ---
@@ -863,6 +916,14 @@ function svgPoint(svg,clientX,clientY){
   const ctm=svg.getScreenCTM(); return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};
 }
 
+// Find the currently-live SVG element for the active drag floor.
+// render() destroys and recreates all SVGs, so we must query the DOM
+// each time rather than holding a stale reference.
+function findDragSvg(){
+  if(!drag.floorId) return null;
+  return document.querySelector(`svg.floorSvg[data-floor-id="${drag.floorId}"]`);
+}
+
 function setRoomFromNW(room,nwX,nwY){
   if(room.corner==="NW"){ room.xIn=nwX; room.yIn=nwY; }
   else if(room.corner==="NE"){ room.xIn=nwX+room.wIn; room.yIn=nwY; }
@@ -899,6 +960,7 @@ function render(){
 
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     svg.classList.add("floorSvg");
+    svg.dataset.floorId=floor.id;
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
     // Label group — appended last so labels always render above all objects
@@ -933,18 +995,20 @@ function render(){
 
       const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"room", floorId:floor.id, roomId:room.id}); populateNewItemSelectors();};
       const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
-        drag.active=true; drag.kind="room"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
-        drag.startPt=svgPoint(svg, ev.clientX, ev.clientY); drag.startNW={xIn:rr.xIn,yIn:rr.yIn}; };
+        drag.active=true; drag.kind="room"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
+        drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.startNW={xIn:rr.xIn,yIn:rr.yIn};
+        drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
       rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
       rect.addEventListener("mousedown",onDown);
       marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
-        drag.active=true; drag.kind="room-resize"; drag.roomId=room.id; drag.itemId=null; drag.svg=svg;
-        drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
+        drag.active=true; drag.kind="room-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
+        drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
         const rnw=normalizeRectAbs(room);
         const moving=markerAbsPos(rnw, room, room.corner);
         const opp=oppositeCorner(room.corner);
         const fixed=markerAbsPos(rnw, room, opp);
         drag.startRect={nw:rnw, wIn:room.wIn, hIn:room.hIn, corner:room.corner, moving, fixed}; drag.fixedPt=fixed;
+        drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
       });
 
       g.appendChild(rect); g.appendChild(marker);
@@ -994,19 +1058,21 @@ function render(){
 
           const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"item", floorId:floor.id, roomId:room.id, itemId:it.id}); populateNewItemSelectors();};
           const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
-            drag.active=true; drag.kind="item"; drag.roomId=room.id; drag.itemId=it.id; drag.svg=svg;
-            drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
+            drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
+            drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
             const rel=normalizeRectRelToRoomPrimary(it, room);
-            drag.startNW={xIn:rel.xIn,yIn:rel.yIn}; };
+            drag.startNW={xIn:rel.xIn,yIn:rel.yIn};
+            drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
           rect.addEventListener("mousedown",onDown);
           marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
-            drag.active=true; drag.kind="item-resize"; drag.roomId=room.id; drag.itemId=it.id; drag.svg=svg;
-            drag.startPt=svgPoint(svg, ev.clientX, ev.clientY);
+            drag.active=true; drag.kind="item-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
+            drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
             const moving=markerAbsPos(abs, it, it.corner);
             const opp=oppositeCorner(it.corner);
             const fixed=markerAbsPos(abs, it, opp);
             drag.startRect={wIn:it.wIn, hIn:it.hIn, corner:it.corner, moving, fixed}; drag.fixedPt=fixed;
+            drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
           });
 
           g.appendChild(rect); g.appendChild(marker);
@@ -1060,13 +1126,59 @@ function wire(){
   document.getElementById("selDuplicate").addEventListener("click",(e)=>{e.preventDefault(); duplicateSelected();});
   document.getElementById("selDelete").addEventListener("click",(e)=>{e.preventDefault(); deleteSelected();});
 
-  // Keyboard shortcuts: Delete = delete selected, Insert = duplicate selected
+  // Keyboard shortcuts
   document.addEventListener("keydown",(ev)=>{
+    // ── Esc: abort an in-progress drag and revert ──────────────────────────
+    if(ev.key==="Escape"){
+      if(drag.active && drag.preState){
+        ev.preventDefault();
+        ACTIVE.house=JSON.parse(JSON.stringify(drag.preState));
+        HOUSE=ACTIVE.house;
+        drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null;
+        drag.preState=null; drag.moved=false;
+        state.selected=drag.preSelected?JSON.parse(JSON.stringify(drag.preSelected)):null;
+        drag.preSelected=null;
+        state.selectedSnapshot=null;
+        buildAll(); render(); saveApp();
+      }
+      return;
+    }
+
+    // ── Ctrl / Cmd shortcuts (undo / redo) ────────────────────────────────
+    if(ev.ctrlKey||ev.metaKey){
+      if(ev.key==="z"||ev.key==="Z"){ ev.preventDefault(); if(ev.shiftKey) redoHistory(); else undoHistory(); return; }
+      if(ev.key==="y"||ev.key==="Y"){ ev.preventDefault(); redoHistory(); return; }
+    }
+
+    // Remaining shortcuts must not fire when focus is in a form field
     const tag=(ev.target?.tagName||"").toLowerCase();
     const editable=tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable;
     if(editable) return;
-    if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); }
-    else if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); }
+
+    // ── Delete / Insert ───────────────────────────────────────────────────
+    if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); return; }
+    if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); return; }
+
+    // ── Arrow-key nudge ───────────────────────────────────────────────────
+    const arrows=["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"];
+    if(arrows.includes(ev.key)){
+      if(!state.selected) return;
+      ev.preventDefault();
+      const step=ev.shiftKey?NUDGE_SHIFT_IN:NUDGE_NORMAL_IN;
+      const dx=ev.key==="ArrowLeft"?-step:ev.key==="ArrowRight"?step:0;
+      const dy=ev.key==="ArrowUp"?-step:ev.key==="ArrowDown"?step:0;
+      if(state.selected.kind==="room"){
+        const res=findRoom(state.selected.roomId); if(!res) return;
+        const rr=normalizeRectAbs(res.room);
+        setRoomFromNW(res.room, rr.xIn+dx, rr.yIn+dy);
+      } else {
+        const res=findItem(state.selected.itemId); if(!res) return;
+        const rel=normalizeRectRelToRoomPrimary(res.item, res.room);
+        setItemFromNW_Rel(res.item, res.room, rel.xIn+dx, rel.yIn+dy);
+      }
+      buildSelectedForm(); render(); saveApp();
+      pushHistory();
+    }
   });
 
   document.getElementById("newFloor").addEventListener("change",()=>populateNewItemSelectors());
@@ -1108,9 +1220,18 @@ function wire(){
 
   window.addEventListener("mousemove",(ev)=>{
     if(!drag.active) return;
-    const p=svgPoint(drag.svg, ev.clientX, ev.clientY);
-    const dxIn=(p.x-drag.startPt.x)/state.ppi;
-    const dyIn=(p.y-drag.startPt.y)/state.ppi;
+    drag.moved=true;
+    // Always query the live SVG — render() destroys and recreates the DOM each
+    // frame, so any reference stored at mousedown is stale after the first RAF.
+    // Using svgPoint on the *same* live element for both the start and current
+    // client positions guarantees the delta is correct even when the viewBox
+    // dimensions or the CSS display scale change during a drag.
+    const liveSvg=findDragSvg();
+    if(!liveSvg) return;
+    const cur=svgPoint(liveSvg, ev.clientX, ev.clientY);
+    const start=svgPoint(liveSvg, drag.startClientX, drag.startClientY);
+    const dxIn=(cur.x-start.x)/state.ppi;
+    const dyIn=(cur.y-start.y)/state.ppi;
     if(drag.kind==="room-resize"){
       const res=findRoom(drag.roomId); if(!res) return;
       const fixed=drag.startRect.fixed; const moving0=drag.startRect.moving;
@@ -1149,7 +1270,11 @@ function wire(){
       requestAnimationFrame(()=>{drag.raf=false; render(); saveApp();});
     }
   });
-  window.addEventListener("mouseup",()=>{drag.active=false; drag.kind=null; drag.roomId=null; drag.itemId=null; drag.svg=null;});
+  window.addEventListener("mouseup",()=>{
+    if(drag.active && drag.moved){ pushHistory(); }
+    drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null;
+    drag.preState=null; drag.preSelected=null; drag.moved=false;
+  });
 }
 
 
@@ -1219,6 +1344,9 @@ async function initApp(forceSeed=false){
   state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   buildAll(); render(); saveApp();
+  // Seed the initial undo-history snapshot
+  history.stack=[]; history.index=-1;
+  pushHistory();
 }
 
 wire();
