@@ -25,7 +25,6 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 - **Additional keyboard shortcuts**
   - Select All: Ctrl + A — Quickly selects every element in the current layout.
   - Group / Ungroup: Ctrl + G to group selected elements and Ctrl + Shift + G to ungroup them.
-  - Toggle Grid: Ctrl + ' or Ctrl + Shift + 4 — Helps users align structures precisely.
   - Layer Order:
     - Bring Forward: Ctrl + ]
     - Send Backward: Ctrl + [
@@ -39,7 +38,9 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
   - From list to list, or via canvas drop target
 - LocalStorage autosave all changes
 - Multi-select
-
+- Rulers along X/Y axis
+- Optional grid snap
+ 
 ### Interaction + UX improvements (medium)
 - **Lock/freeze objects to prevent accidental edits**
   - Per-object lock
@@ -60,9 +61,6 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 - **Rotation**
   - Rotate items, and optionally rooms
   - Persist rotation and update export logic
-- **Rulers and guides**
-  - Rulers along X/Y axis
-  - Optional grid and snap integration
 
 ### Advanced object modeling (hard)
 - **Different object shapes**
