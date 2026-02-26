@@ -67,3 +67,45 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 .cfgSwatch{cursor:pointer;transition:box-shadow .15s}
 .cfgSwatchPicker{position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;border:none;padding:0;margin:0}
 .cfgDelBtn{color:#ff6b6b!important}
+
+
+/* ── Layout utilities (Structure-Forge) ───────────────────── */
+.sf-m0{margin:0!important}
+.sf-mt4{margin-top:4px!important}
+.sf-mt10{margin-top:10px!important}
+.sf-mt12{margin-top:12px!important}
+.sf-mb10{margin-bottom:10px!important}
+.sf-gap8{gap:8px!important}
+.sf-gap10{gap:10px!important}
+.sf-rowEnd{justify-content:flex-end!important}
+.sf-fieldGrow{flex:1 1 auto!important}
+.sf-hidden{display:none!important}
+.sf-rangeFull{width:100%!important}
+.sf-newLocGrid{display:grid;grid-template-columns:1fr;gap:8px}
+.sf-h44{height:44px!important}
+.sf-alignCenter{align-items:center!important}
+.sf-justifyStart{justify-content:flex-start!important}
+
+/* ── Help / About panel ───────────────────────────────────── */
+.helpBody{font-size:12px;line-height:1.5;color:var(--text)}
+.helpAbout{text-align:center;padding:10px 0 14px}
+.helpAboutTitle{font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--accent)}
+.helpAboutByline{color:var(--muted);font-size:11px;margin-top:3px}
+.helpAboutDesc{margin-top:8px;color:var(--muted);font-size:11px;line-height:1.4}
+.helpDivider{border-top:1px solid var(--border);margin:0 -10px 12px}
+.helpSection{margin-bottom:12px}
+.helpSectionTitle{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.helpGrid2{display:grid;grid-template-columns:1fr 1fr;gap:4px;text-align:center;margin-bottom:6px}
+.helpCornerCard{background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px}
+.helpAccentStrong{color:var(--accent);font-weight:700}
+.helpMutedSm{color:var(--muted);font-size:11px}
+.helpMutedXs{color:var(--muted);font-size:10px}
+.helpCol4{display:flex;flex-direction:column;gap:4px}
+.helpCol5{display:flex;flex-direction:column;gap:5px}
+.helpRow{display:flex;gap:8px;align-items:flex-start}
+.helpPill{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent)}
+.helpStrong{color:var(--text)}
+.helpCredits{text-align:center;color:var(--muted);font-size:11px;line-height:1.6;padding-bottom:4px}
+.helpLink{color:var(--accent);text-decoration:none}
+.helpLink:hover{text-decoration:underline}
+.helpTinyMuted{margin-top:6px;font-size:10px;color:#555}

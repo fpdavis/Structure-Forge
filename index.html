@@ -60,8 +60,8 @@ Notes
     <div class="topbar">
       <div class="line">
         <button class="btn icon" id="navToggle" type="button" title="Collapse/expand left panel">&#9776;</button>
-        <div class="field" style="margin:0;flex:1"><label></label><select id="structureSelect"></select></div>
-        <div class="row" style="justify-content:flex-end;gap:8px">
+        <div class="field sf-fieldGrow sf-m0"><label></label><select id="structureSelect"></select></div>
+        <div class="row sf-rowEnd sf-gap8">
           <button class="btn icon" id="structureNew" type="button" title="New structure">&#10133;</button>
           <button class="btn icon" id="structureDelete" type="button" title="Delete structure">&#128465;</button>
           <button class="btn icon" id="storageReset" type="button" title="Reset stored data">&#8634;</button>
@@ -73,7 +73,7 @@ Notes
       <summary><span class="sumTitle">Selected</span><span class="sumRight"><span id="selHeader">(none)</span><span class="chev"></span></span></summary>
       <div class="panelBody">
         <div class="grid2" id="selForm"></div>
-        <div class="row" style="justify-content:flex-end;margin-top:10px;"><div class="btnRow">
+        <div class="row sf-rowEnd sf-mt10"><div class="btnRow">
           <button class="btn" id="selDuplicate" type="button">Duplicate</button>
           <button class="btn" id="selDelete" type="button">Delete</button>
           <button class="btn" id="selReset" type="button">Reset</button>
@@ -89,12 +89,12 @@ Notes
       <div class="panelBody">
         <div class="grid2">
           <div class="field"><label>Type</label><select id="newType"></select></div>
-          <div id="newLoc" style="display:grid;grid-template-columns:1fr;gap:8px;">
+          <div id="newLoc" class="sf-newLocGrid">
             <div class="field" id="newFloorField"><label>Floor</label><select id="newFloor"></select></div>
-            <div class="field" id="newRoomField" style="display:none;"><label>Room</label><select id="newRoom"></select></div>
+            <div class="field" id="newRoomField" class="sf-hidden"><label>Room</label><select id="newRoom"></select></div>
           </div>
         </div>
-        <div class="row" style="justify-content:flex-end;margin-top:10px;"><button class="btn" id="addNew" type="button">Add New</button></div>
+        <div class="row sf-rowEnd sf-mt10"><button class="btn" id="addNew" type="button">Add New</button></div>
         <div class="hint" id="addNewHint"></div>
       </div>
 </div>
@@ -103,14 +103,14 @@ Notes
     <details class="panel" open>
       <summary><span class="sumTitle">Scale</span><span class="sumRight"><span><strong id="ppiValue">3</strong> px/in</span><span class="chev"></span></span></summary>
       <div class="panelBody">
-        <input id="ppi" type="range" min="1" max="10" step="1" value="3" style="width:100%;margin-top:10px;" />
+        <input id="ppi" type="range" min="1" max="10" step="1" value="3" class="sf-rangeFull sf-mt10" />
       </div>
     </details>
 
     <details class="panel">
       <summary><span class="sumTitle">Floors</span><span class="sumRight"><span id="floorSummary"></span><span class="chev"></span></span></summary>
       <div class="panelBody">
-        <div class="btnRow" style="margin-bottom:10px;">
+        <div class="btnRow sf-mb10">
           <button class="btn" id="showAllFloors" type="button">Show all floors</button>
           <button class="btn" id="hideAllFloors" type="button">Hide all floors</button>
           <button class="btn" id="addFloor" type="button">Add floor</button>
@@ -124,7 +124,7 @@ Notes
       <summary><span class="sumTitle">Element visibility / order</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
         <div class="hint">Use arrows to change which items appear on top of other items.</div>
-        <div id="typeToggles" class="col" style="margin-top:10px;"></div>
+        <div id="typeToggles" class="col sf-mt10"></div>
       </div>
     </details>
 
@@ -132,7 +132,7 @@ Notes
       <summary><span class="sumTitle">Label visibility</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
         <div class="hint"></div>
-        <div id="labelToggles" class="col" style="margin-top:10px;"></div>
+        <div id="labelToggles" class="col sf-mt10"></div>
       </div>
     </details>
 
@@ -144,14 +144,14 @@ Notes
     <details class="panel">
       <summary><span class="sumTitle">Configuration</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
-        <div class="btnRow" style="margin-bottom:10px;justify-content:flex-end;">
+        <div class="btnRow sf-mb10 sf-rowEnd">
           <button class="btn" id="cfgReset" type="button">Reset</button>
           <button class="btn" id="cfgSave" type="button">Save</button>
         </div>
 
         <div class="field"><label>Structure name</label><input id="structureName" type="text" /></div>
 
-        <div class="field" style="margin-top:10px;">
+        <div class="field sf-mt10">
           <label>Add new item type</label>
           <div class="row">
             <input id="newTypeName" type="text" placeholder="e.g., SmokeDetector" />
@@ -160,186 +160,174 @@ Notes
           <div class="hint">Add new types such as tables, cabinets, chairs, rugs, etc.</div>
         </div>
 
-        <div class="subtle" style="margin-top:10px;">Defaults used for new items. Existing items render from their own values if present.</div>
-        <div id="cfgForm" class="col" style="margin-top:10px;gap:10px;"></div>
+        <div class="subtle sf-mt10">Defaults used for new items. Existing items render from their own values if present.</div>
+        <div id="cfgForm" class="col sf-mt10 sf-gap10"></div>
       </div>
     </details>
 
     <details class="panel">
       <summary><span class="sumTitle">Export / Import</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
-        <div class="grid2" style="margin-bottom:10px;">
+        <div class="grid2 sf-mb10">
           <div class="field"><label>Format</label><select id="exportFormat"></select></div>
-          <div class="checkbox" style="height:44px;align-items:center;justify-content:flex-start;">
+          <div class="checkbox sf-h44 sf-alignCenter sf-justifyStart">
             <input id="exportVisibleOnly" type="checkbox" />
             <div>Visible only</div>
           </div>
         </div>
-        <div class="btnRow" style="margin-bottom:10px;">
+        <div class="btnRow sf-mb10">
           <button class="btn" id="exportBtn" type="button" title="Download exported file">&#11015; Save file</button>
           <button class="btn" id="importBtn" type="button" title="Open a .sf-plan.json file">&#11014; Open file</button>
         </div>
-        <input type="file" id="importFileInput" accept=".sf-plan.json,.json" style="display:none;" />
-        <div class="hint" id="exportImportHint" style="margin-top:4px;"></div>
+        <input type="file" id="importFileInput" accept=".sf-plan.json,.json" class="sf-hidden" />
+        <div class="hint" id="exportImportHint" class="sf-mt4"></div>
       </div>
     </details>
 
     <details class="panel">
       <summary><span class="sumTitle">Help / About</span><span class="sumRight"><span class="chev"></span></span></summary>
-      <div class="panelBody" style="font-size:12px;line-height:1.5;color:var(--text);">
+      <div class="panelBody helpBody">
 
         <!-- ── ABOUT ─────────────────────────────── -->
-        <div style="text-align:center;padding:10px 0 14px;">
-          <div style="font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--accent);">⚒ Structure Forge</div>
-          <div style="color:var(--muted);font-size:11px;margin-top:3px;">by ExF Productions</div>
-          <div style="margin-top:8px;color:var(--muted);font-size:11px;line-height:1.4;">
+        <div class="helpAbout">
+          <div class="helpAboutTitle">⚒ Structure Forge</div>
+          <div class="helpAboutByline">by ExF Productions</div>
+          <div class="helpAboutDesc">
             Browser-based floor &amp; structure layout tool.<br>
             Model buildings with floors, rooms, and objects.
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── CORNER REFERENCE ──────────────────── -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">📐 Corner Reference</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;text-align:center;margin-bottom:6px;">
-            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">NW</span><br><span style="color:var(--muted);font-size:10px;">North-West</span></div>
-            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">NE</span><br><span style="color:var(--muted);font-size:10px;">North-East</span></div>
-            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">SW</span><br><span style="color:var(--muted);font-size:10px;">South-West</span></div>
-            <div style="background:rgba(106,166,255,.08);border:1px solid rgba(106,166,255,.2);border-radius:8px;padding:5px;font-size:11px;"><span style="color:var(--accent);font-weight:700;">SE</span><br><span style="color:var(--muted);font-size:10px;">South-East</span></div>
+        <div class="helpSection">
+          <div class="helpSectionTitle">📐 Corner Reference</div>
+          <div class="helpGrid2">
+            <div class="helpCornerCard"><span class="helpAccentStrong">NW</span><br><span class="helpMutedXs">North-West</span></div>
+            <div class="helpCornerCard"><span class="helpAccentStrong">NE</span><br><span class="helpMutedXs">North-East</span></div>
+            <div class="helpCornerCard"><span class="helpAccentStrong">SW</span><br><span class="helpMutedXs">South-West</span></div>
+            <div class="helpCornerCard"><span class="helpAccentStrong">SE</span><br><span class="helpMutedXs">South-East</span></div>
           </div>
-          <div style="color:var(--muted);font-size:11px;">The selected corner defines which point the <strong style="color:var(--text);">(X, Y)</strong> coordinate refers to on the element. Can be used to designate hinges.</div>
+          <div class="helpMutedSm">The selected corner defines which point the <strong class="helpStrong">(X, Y)</strong> coordinate refers to on the element. Can be used to designate hinges.</div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── MOUSE CONTROLS ────────────────────── -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">🖱 Mouse Controls</div>
-          <div style="display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">L-Click</span>
-              <span style="color:var(--muted);font-size:11px;">Select an object</span>
+        <div class="helpSection">
+          <div class="helpSectionTitle">🖱 Mouse Controls</div>
+          <div class="helpCol5">
+            <div class="helpRow">
+              <span class="helpPill">L-Click</span>
+              <span class="helpMutedSm">Select an object</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">L-Drag</span>
-              <span style="color:var(--muted);font-size:11px;">Move selected object</span>
+            <div class="helpRow">
+              <span class="helpPill">L-Drag</span>
+              <span class="helpMutedSm">Move selected object</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Corner</span>
-              <span style="color:var(--muted);font-size:11px;">Drag a corner handle to resize</span>
+            <div class="helpRow">
+              <span class="helpPill">Corner</span>
+              <span class="helpMutedSm">Drag a corner handle to resize</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">R-Drag</span>
-              <span style="color:var(--muted);font-size:11px;">Pan the canvas</span>
+            <div class="helpRow">
+              <span class="helpPill">R-Drag</span>
+              <span class="helpMutedSm">Pan the canvas</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Scroll</span>
-              <span style="color:var(--muted);font-size:11px;">Zoom in / out</span>
+            <div class="helpRow">
+              <span class="helpPill">Scroll</span>
+              <span class="helpMutedSm">Zoom in / out</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">R-Click</span>
-              <span style="color:var(--muted);font-size:11px;">Context menu — duplicate, delete, lock, bring front/back</span>
+            <div class="helpRow">
+              <span class="helpPill">R-Click</span>
+              <span class="helpMutedSm">Context menu — duplicate, delete, lock, bring front/back</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Swatch</span>
-              <span style="color:var(--muted);font-size:11px;">Click color swatch to open color picker</span>
+            <div class="helpRow">
+              <span class="helpPill">Swatch</span>
+              <span class="helpMutedSm">Click color swatch to open color picker</span>
             </div>
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── KEYBOARD SHORTCUTS ────────────────── -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">⌨ Keyboard Shortcuts</div>
-          <div style="display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+Z</span>
-              <span style="color:var(--muted);font-size:11px;">Undo</span>
+        <div class="helpSection">
+          <div class="helpSectionTitle">⌨ Keyboard Shortcuts</div>
+          <div class="helpCol5">
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+Z</span>
+              <span class="helpMutedSm">Undo</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+Shift+Z / Ctrl+Y</span>
-              <span style="color:var(--muted);font-size:11px;">Redo</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+Shift+Z / Ctrl+Y</span>
+              <span class="helpMutedSm">Redo</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ins / Ctrl+D</span>
-              <span style="color:var(--muted);font-size:11px;">Duplicate selected object</span>
+            <div class="helpRow">
+              <span class="helpPill">Ins / Ctrl+D</span>
+              <span class="helpMutedSm">Duplicate selected object</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+C / Ctrl+Ins</span>
-              <span style="color:var(--muted);font-size:11px;">Copy selected room or item</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+C / Ctrl+Ins</span>
+              <span class="helpMutedSm">Copy selected room or item</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+X</span>
-              <span style="color:var(--muted);font-size:11px;">Cut selected room or item</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+X</span>
+              <span class="helpMutedSm">Cut selected room or item</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+V / Shift+Ins</span>
-              <span style="color:var(--muted);font-size:11px;">Paste into selected room (or the room containing the selected item)</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+V / Shift+Ins</span>
+              <span class="helpMutedSm">Paste into selected room (or the room containing the selected item)</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Del</span>
-              <span style="color:var(--muted);font-size:11px;">Delete selected object</span>
+            <div class="helpRow">
+              <span class="helpPill">Del</span>
+              <span class="helpMutedSm">Delete selected object</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+N</span>
-              <span style="color:var(--muted);font-size:11px;">New structure</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+N</span>
+              <span class="helpMutedSm">New structure</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+O</span>
-              <span style="color:var(--muted);font-size:11px;">Open file (import JSON)</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+O</span>
+              <span class="helpMutedSm">Open file (import JSON)</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+S</span>
-              <span style="color:var(--muted);font-size:11px;">Save file (export JSON)</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+S</span>
+              <span class="helpMutedSm">Save file (export JSON)</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Ctrl+P</span>
-              <span style="color:var(--muted);font-size:11px;">Collapse panel and print</span>
+            <div class="helpRow">
+              <span class="helpPill">Ctrl+P</span>
+              <span class="helpMutedSm">Collapse panel and print</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Shift+1</span>
-              <span style="color:var(--muted);font-size:11px;">Zoom to fit</span>
+            <div class="helpRow">
+              <span class="helpPill">Shift+1</span>
+              <span class="helpMutedSm">Zoom to fit</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Shift+2</span>
-              <span style="color:var(--muted);font-size:11px;">Zoom to selection</span>
+            <div class="helpRow">
+              <span class="helpPill">↑↓←→</span>
+              <span class="helpMutedSm">Nudge selected object (1 inch)</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Shift+3</span>
-              <span style="color:var(--muted);font-size:11px;">Zoom to fit width (scroll top)</span>
+            <div class="helpRow">
+              <span class="helpPill">⇧ + ↑↓←→</span>
+              <span class="helpMutedSm">Nudge larger step (12 inches)</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Shift+4</span>
-              <span style="color:var(--muted);font-size:11px;">Zoom to fit height (scroll left)</span>
+            <div class="helpRow">
+              <span class="helpPill">Esc</span>
+              <span class="helpMutedSm">Clear selection or abort drag</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">↑↓←→</span>
-              <span style="color:var(--muted);font-size:11px;">Nudge selected object (1 inch)</span>
-            </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">⇧ + ↑↓←→</span>
-              <span style="color:var(--muted);font-size:11px;">Nudge larger step (12 inches)</span>
-            </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Esc</span>
-              <span style="color:var(--muted);font-size:11px;">Clear selection or abort drag</span>
-            </div>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
-              <span style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;white-space:nowrap;flex-shrink:0;color:var(--accent);">Enter</span>
-              <span style="color:var(--muted);font-size:11px;">Commit inline rename</span>
+            <div class="helpRow">
+              <span class="helpPill">Enter</span>
+              <span class="helpMutedSm">Commit inline rename</span>
             </div>
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── FEATURES ───────────────────────────── -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">✨ Features</div>
-          <div style="display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:11px;">
+        <div class="helpSection">
+          <div class="helpSectionTitle">✨ Features</div>
+          <div class="helpCol4 helpMutedSm">
             <div>📂 &nbsp;Multi-structure &amp; multi-floor projects</div>
             <div>🏠 &nbsp;Typed elements: Rooms, Doors, Windows,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Outlets, Lights, custom types &amp; more</div>
             <div>📏 &nbsp;Measurements in inches; adjustable scale</div>
@@ -357,29 +345,29 @@ Notes
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── WORKFLOW TIPS ──────────────────────── -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">💡 Tips</div>
-          <div style="display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:11px;">
-            <div>• <strong style="color:var(--text);">Add New Item</strong> pre-populates floor &amp; room from your last canvas click.</div>
-            <div>• <strong style="color:var(--text);">Z-order</strong> is type-based. Use ↑↓ arrows in Element Visibility to layer types.</div>
-            <div>• <strong style="color:var(--text);">Fill Opacity</strong> steps in increments of 0.1 (0 = transparent, 1 = solid).</div>
-            <div>• <strong style="color:var(--text);">Export formats:</strong> JSON (canonical), Text, SVG, DXF, LOGO (turtle).</div>
+        <div class="helpSection">
+          <div class="helpSectionTitle">💡 Tips</div>
+          <div class="helpCol5 helpMutedSm">
+            <div>• <strong class="helpStrong">Add New Item</strong> pre-populates floor &amp; room from your last canvas click.</div>
+            <div>• <strong class="helpStrong">Z-order</strong> is type-based. Use ↑↓ arrows in Element Visibility to layer types.</div>
+            <div>• <strong class="helpStrong">Fill Opacity</strong> steps in increments of 0.1 (0 = transparent, 1 = solid).</div>
+            <div>• <strong class="helpStrong">Export formats:</strong> JSON (canonical), Text, SVG, DXF, LOGO (turtle).</div>
           </div>
         </div>
 
-        <div style="border-top:1px solid var(--border);margin:0 -10px 12px;"></div>
+        <div class="helpDivider"></div>
 
         <!-- ── CREDITS ────────────────────────────── -->
-        <div style="text-align:center;color:var(--muted);font-size:11px;line-height:1.6;padding-bottom:4px;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">🏅 Credits</div>
-          <div>Built with ♥ by <strong style="color:var(--text);">ExF Productions</strong></div>
-          <div style="margin-top:4px;">
-            <a href="https://github.com/fpdavis/Structure-Forge" target="_blank" style="color:var(--accent);text-decoration:none;">github.com/fpdavis/Structure-Forge</a>
+        <div class="helpCredits">
+          <div class="helpSectionTitle">🏅 Credits</div>
+          <div>Built with ♥ by <strong class="helpStrong">ExF Productions</strong></div>
+          <div class="sf-mt4">
+            <a href="https://github.com/fpdavis/Structure-Forge" target="_blank" class="helpLink">github.com/fpdavis/Structure-Forge</a>
           </div>
-          <div style="margin-top:6px;font-size:10px;color:#555;">No external libraries · Pure JS + SVG</div>
+          <div class="helpTinyMuted">No external libraries · Pure JS + SVG</div>
         </div>
 
       </div>
@@ -387,7 +375,7 @@ Notes
 		
 	<div class="line2">
       <div class="subtle" id="storageStatus">Storage: not saved yet</div>
-	  <div class="hint" style="margin-top:12px;">ExF Productions' Structure Forge</div>
+	  <div class="hint sf-mt12">ExF Productions' Structure Forge</div>
     </div>
 
   </aside>
