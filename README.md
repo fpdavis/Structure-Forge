@@ -16,13 +16,6 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 
 ---
 
-## Known Bugs
-
-- **Right mouse selection fix**
-  - Remove right mouse selection ability. Right-click interactions can interfere with selection behavior (selection vs context/pan behavior needs consistent rules).
-
----
-
 ## TODO List
 
 ### Core editing enhancements (easy → medium)
@@ -67,9 +60,6 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 - **Rotation**
   - Rotate items, and optionally rooms
   - Persist rotation and update export logic
-- **Area and perimeter calculations**
-  - Per room
-  - Totals per floor
 - **Rulers and guides**
   - Rulers along X/Y axis
   - Optional grid and snap integration
