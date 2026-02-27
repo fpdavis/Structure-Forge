@@ -16,7 +16,8 @@ const DEFAULT_UI={
     minorColor:"#ffffff",
     majorColor:"#ffffff",
     minorOpacity:0.18,
-    majorOpacity:0.40
+    majorOpacity:0.40,
+    snapEnabled:false
   }
 };
 
@@ -132,6 +133,11 @@ function formatLinear(v){
   return state.units==="metric" ? formatMetricLabel(v) : formatFeetInches(v);
 }
 function inputUnitLabel(){ return state.units==="metric" ? "mm" : "in"; }
+function snapToGridIn(valueIn){
+  const step=Number(state.grid.minorStep||0);
+  if(!(step>0)) return valueIn;
+  return Math.round(valueIn/step)*step;
+}
 
 function _snapshotViewConfiguration(){
   return {
@@ -144,7 +150,8 @@ function _snapshotViewConfiguration(){
     minorColor: String(state.grid.minorColor||"#ffffff"),
     majorColor: String(state.grid.majorColor||"#ffffff"),
     minorOpacity: Number(state.grid.minorOpacity),
-    majorOpacity: Number(state.grid.majorOpacity)
+    majorOpacity: Number(state.grid.majorOpacity),
+    snapEnabled: !!state.grid.snapEnabled
   };
 }
 
@@ -160,6 +167,7 @@ function _applyViewConfiguration(cfg){
   if(typeof cfg.majorColor==="string") state.grid.majorColor=cfg.majorColor;
   if(Number.isFinite(cfg.minorOpacity)) state.grid.minorOpacity=clamp(Number(cfg.minorOpacity),0,1);
   if(Number.isFinite(cfg.majorOpacity)) state.grid.majorOpacity=clamp(Number(cfg.majorOpacity),0,1);
+  if(cfg.snapEnabled!=null) state.grid.snapEnabled=!!cfg.snapEnabled;
 }
 
 function _applyViewConfigurationFromActive(){
@@ -284,7 +292,14 @@ function markerAbsPos(objNW, obj, corner){
   return {xIn:cx,yIn:cy};
 }
 
+const RESIZE_CORNERS=["NW","NE","SW","SE"];
+const RESIZE_EDGES=["N","E","S","W"];
 function oppositeCorner(c){ return c==="NW"?"SE":c==="SE"?"NW":c==="NE"?"SW":"NE"; }
+function cursorForCorner(c){
+  if(c==="NW"||c==="SE") return "nwse-resize";
+  return "nesw-resize";
+}
+function cursorForEdge(e){ return (e==="N"||e==="S") ? "ns-resize" : "ew-resize"; }
 function setStatus(msg){ const el=document.getElementById("storageStatus"); if(el) el.textContent=msg; }
 
 function _fmtTime(d){
@@ -473,6 +488,37 @@ function resetStorage(){ if(!confirm("Reset stored data? This cannot be undone."
 function findFloor(floorId){ return HOUSE.floors.find(f=>f.id===floorId)||null; }
 function findRoom(roomId){ for(const f of HOUSE.floors){ const r=f.rooms.find(x=>x.id===roomId); if(r) return {floor:f, room:r}; } return null; }
 function findItem(itemId){ for(const f of HOUSE.floors){ for(const r of f.rooms){ const it=r.items.find(x=>x.id===itemId); if(it) return {floor:f, room:r, item:it}; } } return null; }
+function findRoomOnFloorAtAbsPoint(floorId, xIn, yIn, excludeRoomId=null){
+  const floor=findFloor(floorId);
+  if(!floor) return null;
+  for(let i=(floor.rooms||[]).length-1;i>=0;i--){
+    const room=floor.rooms[i];
+    if(excludeRoomId && room.id===excludeRoomId) continue;
+    const rr=normalizeRectAbs(room);
+    if(xIn>=rr.xIn && xIn<=rr.xIn+rr.wIn && yIn>=rr.yIn && yIn<=rr.yIn+rr.hIn){
+      return {floor, room};
+    }
+  }
+  return null;
+}
+
+function reassignItemToRoom(itemId, targetRoomId){
+  const src=findItem(itemId);
+  const dst=findRoom(targetRoomId);
+  if(!src || !dst) return false;
+  if(src.room.id===dst.room.id) return false;
+
+  const abs=itemAbsRect(src.item, src.room);
+  src.room.items=src.room.items.filter(it=>it.id!==src.item.id);
+
+  src.item.roomId=dst.room.id;
+  const dstNW=normalizeRectAbs(dst.room);
+  setItemFromNW_Rel(src.item, dst.room, abs.xIn-dstNW.xIn, abs.yIn-dstNW.yIn);
+  dst.room.items.push(src.item);
+
+  state.selected={kind:"item", floorId:dst.floor.id, roomId:dst.room.id, itemId:src.item.id};
+  return true;
+}
 
 const ROOM_FIELDS=[
   {key:"name",label:"Name",kind:"text"},
@@ -520,6 +566,39 @@ function buildSelectedForm(){
   }
 
   const fields = state.selected.kind==="room" ? ROOM_FIELDS : ITEM_FIELDS;
+
+  if(state.selected.kind==="item"){
+    const currentItem=findItem(state.selected.itemId);
+    if(currentItem){
+      const roomField=document.createElement("div"); roomField.className="field";
+      const roomLabel=document.createElement("label"); roomLabel.textContent="Room";
+      const roomSelect=document.createElement("select"); roomSelect.id="sel_roomId";
+      for(const floor of HOUSE.floors){
+        const group=document.createElement("optgroup");
+        group.label=floor.name;
+        for(const room of (floor.rooms||[])){
+          const option=document.createElement("option");
+          option.value=room.id;
+          option.textContent=room.name||"Room";
+          group.appendChild(option);
+        }
+        if(group.children.length) roomSelect.appendChild(group);
+      }
+      roomSelect.value=currentItem.room.id;
+      roomSelect.addEventListener("change",()=>{
+        if(reassignItemToRoom(state.selected.itemId, roomSelect.value)){
+          buildAll();
+          render();
+          markDirty();
+          pushHistory();
+        }
+      });
+      roomField.appendChild(roomLabel);
+      roomField.appendChild(roomSelect);
+      wrap.appendChild(roomField);
+    }
+  }
+
   for(const f of fields){
     const box=document.createElement("div"); box.className="field";
     const lab=document.createElement("label");
@@ -1629,7 +1708,8 @@ function render(){
       rect.setAttribute("stroke",room.lineColor||st.defaultLineColor);
       rect.setAttribute("stroke-width",st.strokeWidth);
       rect.classList.add("selectable");
-      if(state.selected?.kind==="room" && state.selected.roomId===room.id) rect.classList.add("selected-stroke");
+      const roomSelected=state.selected?.kind==="room" && state.selected.roomId===room.id;
+      if(roomSelected) rect.classList.add("selected-stroke");
 
       const markerSize=clamp(inToPx(4),6,18);
       const mpos=markerAbsPos(rr, room, room.corner);
@@ -1646,20 +1726,62 @@ function render(){
         drag.active=true; drag.kind="room"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
         drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.startNW={xIn:rr.xIn,yIn:rr.yIn};
         drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
-      rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
-      rect.addEventListener("mousedown",onDown);
-      marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+      const beginRoomResize=(handleCorner,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
         drag.active=true; drag.kind="room-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
         drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
         const rnw=normalizeRectAbs(room);
-        const moving=markerAbsPos(rnw, room, room.corner);
-        const opp=oppositeCorner(room.corner);
+        const moving=markerAbsPos(rnw, room, handleCorner);
+        const opp=oppositeCorner(handleCorner);
         const fixed=markerAbsPos(rnw, room, opp);
-        drag.startRect={nw:rnw, wIn:room.wIn, hIn:room.hIn, corner:room.corner, moving, fixed}; drag.fixedPt=fixed;
+        drag.startRect={nw:rnw, wIn:room.wIn, hIn:room.hIn, corner:handleCorner, moving, fixed}; drag.fixedPt=fixed;
         drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
-      });
+      };
+      rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
+      rect.addEventListener("mousedown",onDown);
 
       g.appendChild(rect); g.appendChild(marker);
+      if(roomSelected){
+        const beginRoomEdgeResize=(edge,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          drag.active=true; drag.kind="room-edge-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
+          drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
+          drag.startRect={xIn:rr.xIn,yIn:rr.yIn,wIn:room.wIn,hIn:room.hIn,edge};
+          drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
+        };
+        const edgePad=markerSize*1.4;
+        const mkEdge=(edge,x1,y1,x2,y2)=>{
+          const e=document.createElementNS("http://www.w3.org/2000/svg","line");
+          e.setAttribute("x1",x1); e.setAttribute("y1",y1); e.setAttribute("x2",x2); e.setAttribute("y2",y2);
+          e.setAttribute("stroke","rgba(255,255,255,0.001)");
+          e.setAttribute("stroke-width",edgePad);
+          e.classList.add("selectable");
+          e.style.cursor=cursorForEdge(edge);
+          e.addEventListener("click",onClick);
+          e.addEventListener("mousedown",(ev)=>beginRoomEdgeResize(edge,ev));
+          g.appendChild(e);
+        };
+        mkEdge("N",x,y,x+w,y);
+        mkEdge("S",x,y+h,x+w,y+h);
+        mkEdge("W",x,y,x,y+h);
+        mkEdge("E",x+w,y,x+w,y+h);
+      }
+
+      if(roomSelected){
+        for(const handleCorner of RESIZE_CORNERS){
+          const hpos=markerAbsPos(rr, room, handleCorner);
+          const handle=document.createElementNS("http://www.w3.org/2000/svg","rect");
+          handle.setAttribute("x",fx(hpos.xIn)-markerSize/2);
+          handle.setAttribute("y",fy(hpos.yIn)-markerSize/2);
+          handle.setAttribute("width",markerSize); handle.setAttribute("height",markerSize);
+          handle.setAttribute("fill","#ffffff");
+          handle.setAttribute("stroke",room.lineColor||st.defaultLineColor);
+          handle.setAttribute("stroke-width",1.5);
+          handle.classList.add("selectable");
+          handle.style.cursor=cursorForCorner(handleCorner);
+          handle.addEventListener("click",onClick);
+          handle.addEventListener("mousedown",(ev)=>beginRoomResize(handleCorner,ev));
+          g.appendChild(handle);
+        }
+      }
 
       if(isLabelVisible("Room") && room.name){
         const t=document.createElementNS("http://www.w3.org/2000/svg","text");
@@ -1692,7 +1814,8 @@ function render(){
           rect.setAttribute("stroke",it.lineColor||st.defaultLineColor);
           rect.setAttribute("stroke-width",st.strokeWidth);
           rect.classList.add("selectable");
-          if(state.selected?.kind==="item" && state.selected.itemId===it.id) rect.classList.add("selected-stroke");
+          const itemSelected=state.selected?.kind==="item" && state.selected.itemId===it.id;
+          if(itemSelected) rect.classList.add("selected-stroke");
 
           const markerSize=clamp(inToPx(4),6,18);
           const mpos=markerAbsPos(abs, it, it.corner);
@@ -1711,19 +1834,61 @@ function render(){
             const rel=normalizeRectRelToRoomPrimary(it, room);
             drag.startNW={xIn:rel.xIn,yIn:rel.yIn};
             drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
-          rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
-          rect.addEventListener("mousedown",onDown);
-          marker.addEventListener("mousedown",(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          const beginItemResize=(handleCorner,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
             drag.active=true; drag.kind="item-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
-            const moving=markerAbsPos(abs, it, it.corner);
-            const opp=oppositeCorner(it.corner);
+            const moving=markerAbsPos(abs, it, handleCorner);
+            const opp=oppositeCorner(handleCorner);
             const fixed=markerAbsPos(abs, it, opp);
-            drag.startRect={wIn:it.wIn, hIn:it.hIn, corner:it.corner, moving, fixed}; drag.fixedPt=fixed;
+            drag.startRect={wIn:it.wIn, hIn:it.hIn, corner:handleCorner, moving, fixed}; drag.fixedPt=fixed;
             drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
-          });
+          };
+          rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
+          rect.addEventListener("mousedown",onDown);
 
           g.appendChild(rect); g.appendChild(marker);
+          if(itemSelected){
+            const beginItemEdgeResize=(edge,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+              drag.active=true; drag.kind="item-edge-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
+              drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
+              drag.startRect={xIn:abs.xIn,yIn:abs.yIn,wIn:it.wIn,hIn:it.hIn,edge};
+              drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false;
+            };
+            const edgePad=markerSize*1.4;
+            const mkEdge=(edge,x1,y1,x2,y2)=>{
+              const e=document.createElementNS("http://www.w3.org/2000/svg","line");
+              e.setAttribute("x1",x1); e.setAttribute("y1",y1); e.setAttribute("x2",x2); e.setAttribute("y2",y2);
+              e.setAttribute("stroke","rgba(255,255,255,0.001)");
+              e.setAttribute("stroke-width",edgePad);
+              e.classList.add("selectable");
+              e.style.cursor=cursorForEdge(edge);
+              e.addEventListener("click",onClick);
+              e.addEventListener("mousedown",(ev)=>beginItemEdgeResize(edge,ev));
+              g.appendChild(e);
+            };
+            mkEdge("N",x,y,x+w,y);
+            mkEdge("S",x,y+h,x+w,y+h);
+            mkEdge("W",x,y,x,y+h);
+            mkEdge("E",x+w,y,x+w,y+h);
+          }
+
+          if(itemSelected){
+            for(const handleCorner of RESIZE_CORNERS){
+              const hpos=markerAbsPos(abs, it, handleCorner);
+              const handle=document.createElementNS("http://www.w3.org/2000/svg","rect");
+              handle.setAttribute("x",fx(hpos.xIn)-markerSize/2);
+              handle.setAttribute("y",fy(hpos.yIn)-markerSize/2);
+              handle.setAttribute("width",markerSize); handle.setAttribute("height",markerSize);
+              handle.setAttribute("fill","#ffffff");
+              handle.setAttribute("stroke",it.lineColor||st.defaultLineColor);
+              handle.setAttribute("stroke-width",1.5);
+              handle.classList.add("selectable");
+              handle.style.cursor=cursorForCorner(handleCorner);
+              handle.addEventListener("click",onClick);
+              handle.addEventListener("mousedown",(ev)=>beginItemResize(handleCorner,ev));
+              g.appendChild(handle);
+            }
+          }
 
           if(isLabelVisible(type) && it.name){
             const t=document.createElementNS("http://www.w3.org/2000/svg","text");
@@ -1800,6 +1965,8 @@ function syncViewPanelUI(){
   if(gmo) gmo.value=String(state.grid.minorOpacity ?? DEFAULT_UI.grid.minorOpacity);
   const gMajo=document.getElementById("gridMajorOpacity");
   if(gMajo) gMajo.value=String(state.grid.majorOpacity ?? DEFAULT_UI.grid.majorOpacity);
+  const gsnap=document.getElementById("gridSnapEnabled");
+  if(gsnap) gsnap.checked=!!state.grid.snapEnabled;
 }
 
 function cycleGridSize(dir){
@@ -1848,6 +2015,7 @@ function wire(){
   document.getElementById("gridMajorColor")?.addEventListener("input",(ev)=>{ state.grid.majorColor=String(ev.target.value||"#ffffff"); render(); _commitViewConfiguration(); });
   document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
+  document.getElementById("gridSnapEnabled")?.addEventListener("change",(ev)=>{ state.grid.snapEnabled=!!ev.target.checked; _commitViewConfiguration(); });
   document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); _commitViewConfiguration(); });
 
   document.getElementById("viewSaveDefault")?.addEventListener("click",(e)=>{e.preventDefault(); saveViewDefaults();});
@@ -2049,26 +2217,75 @@ function wire(){
     if(!liveSvg) return;
     const cur=svgPoint(liveSvg, ev.clientX, ev.clientY);
     const start=svgPoint(liveSvg, drag.startClientX, drag.startClientY);
-    const dxIn=(cur.x-start.x)/state.ppi;
-    const dyIn=(cur.y-start.y)/state.ppi;
+    const snapEnabled=!!state.grid.snapEnabled !== !!ev.shiftKey;
+    const dxRaw=(cur.x-start.x)/state.ppi;
+    const dyRaw=(cur.y-start.y)/state.ppi;
+    let dxIn=dxRaw, dyIn=dyRaw;
+    if(snapEnabled && drag.startNW){
+      dxIn=snapToGridIn(drag.startNW.xIn+dxRaw)-drag.startNW.xIn;
+      dyIn=snapToGridIn(drag.startNW.yIn+dyRaw)-drag.startNW.yIn;
+    }
     if(drag.kind==="room-resize"){
       const res=findRoom(drag.roomId); if(!res) return;
       const fixed=drag.startRect.fixed; const moving0=drag.startRect.moving;
-      const moving={xIn:moving0.xIn+dxIn, yIn:moving0.yIn+dyIn};
+      const moving={xIn:snapEnabled ? snapToGridIn(moving0.xIn+dxRaw) : (moving0.xIn+dxIn), yIn:snapEnabled ? snapToGridIn(moving0.yIn+dyRaw) : (moving0.yIn+dyIn)};
       const x0=Math.min(fixed.xIn, moving.xIn); const y0=Math.min(fixed.yIn, moving.yIn);
       const w=Math.max(1, Math.abs(fixed.xIn-moving.xIn)); const h=Math.max(1, Math.abs(fixed.yIn-moving.yIn));
       res.room.wIn=roundHalf(w); res.room.hIn=roundHalf(h);
       setRoomFromNW(res.room, x0, y0);
       buildSelectedForm();
+    } else if(drag.kind==="room-edge-resize"){
+      const res=findRoom(drag.roomId); if(!res) return;
+      const sr=drag.startRect; const edge=sr.edge;
+      let x=sr.xIn, y=sr.yIn, w=sr.wIn, h=sr.hIn;
+      const right0=sr.xIn+sr.wIn, bot0=sr.yIn+sr.hIn;
+      if(edge==="N"){
+        const ny=snapEnabled ? snapToGridIn(sr.yIn+dyRaw) : (sr.yIn+dyRaw);
+        y=Math.min(ny, bot0-1); h=Math.max(1, bot0-y);
+      } else if(edge==="S"){
+        const by=snapEnabled ? snapToGridIn(bot0+dyRaw) : (bot0+dyRaw);
+        y=sr.yIn; h=Math.max(1, by-y);
+      } else if(edge==="W"){
+        const nx=snapEnabled ? snapToGridIn(sr.xIn+dxRaw) : (sr.xIn+dxRaw);
+        x=Math.min(nx, right0-1); w=Math.max(1, right0-x);
+      } else if(edge==="E"){
+        const rx=snapEnabled ? snapToGridIn(right0+dxRaw) : (right0+dxRaw);
+        x=sr.xIn; w=Math.max(1, rx-x);
+      }
+      res.room.wIn=roundHalf(w); res.room.hIn=roundHalf(h);
+      setRoomFromNW(res.room, x, y);
+      buildSelectedForm();
     } else if(drag.kind==="item-resize"){
       const res=findItem(drag.itemId); if(!res) return;
       const fixed=drag.startRect.fixed; const moving0=drag.startRect.moving;
-      const moving={xIn:moving0.xIn+dxIn, yIn:moving0.yIn+dyIn};
+      const moving={xIn:snapEnabled ? snapToGridIn(moving0.xIn+dxRaw) : (moving0.xIn+dxIn), yIn:snapEnabled ? snapToGridIn(moving0.yIn+dyRaw) : (moving0.yIn+dyIn)};
       const x0=Math.min(fixed.xIn, moving.xIn); const y0=Math.min(fixed.yIn, moving.yIn);
       const w=Math.max(1, Math.abs(fixed.xIn-moving.xIn)); const h=Math.max(1, Math.abs(fixed.yIn-moving.yIn));
       res.item.wIn=roundHalf(w); res.item.hIn=roundHalf(h);
       const roomNW=normalizeRectAbs(res.room);
       setItemFromNW_Rel(res.item, res.room, x0-roomNW.xIn, y0-roomNW.yIn);
+      buildSelectedForm();
+    } else if(drag.kind==="item-edge-resize"){
+      const res=findItem(drag.itemId); if(!res) return;
+      const sr=drag.startRect; const edge=sr.edge;
+      let x=sr.xIn, y=sr.yIn, w=sr.wIn, h=sr.hIn;
+      const right0=sr.xIn+sr.wIn, bot0=sr.yIn+sr.hIn;
+      if(edge==="N"){
+        const ny=snapEnabled ? snapToGridIn(sr.yIn+dyRaw) : (sr.yIn+dyRaw);
+        y=Math.min(ny, bot0-1); h=Math.max(1, bot0-y);
+      } else if(edge==="S"){
+        const by=snapEnabled ? snapToGridIn(bot0+dyRaw) : (bot0+dyRaw);
+        y=sr.yIn; h=Math.max(1, by-y);
+      } else if(edge==="W"){
+        const nx=snapEnabled ? snapToGridIn(sr.xIn+dxRaw) : (sr.xIn+dxRaw);
+        x=Math.min(nx, right0-1); w=Math.max(1, right0-x);
+      } else if(edge==="E"){
+        const rx=snapEnabled ? snapToGridIn(right0+dxRaw) : (right0+dxRaw);
+        x=sr.xIn; w=Math.max(1, rx-x);
+      }
+      res.item.wIn=roundHalf(w); res.item.hIn=roundHalf(h);
+      const roomNW=normalizeRectAbs(res.room);
+      setItemFromNW_Rel(res.item, res.room, x-roomNW.xIn, y-roomNW.yIn);
       buildSelectedForm();
     } else if(drag.kind==="room"){
       const res=findRoom(drag.roomId); if(!res) return;
@@ -2090,6 +2307,14 @@ function wire(){
     }
   });
   window.addEventListener("mouseup",()=>{
+    if(drag.active && drag.moved && drag.kind==="item"){
+      const res=findItem(drag.itemId);
+      if(res){
+        const abs=itemAbsRect(res.item, res.room);
+        const dropTarget=findRoomOnFloorAtAbsPoint(res.floor.id, abs.xIn+abs.wIn/2, abs.yIn+abs.hIn/2, res.room.id);
+        if(dropTarget) reassignItemToRoom(res.item.id, dropTarget.room.id);
+      }
+    }
     if(drag.active && drag.moved){ pushHistory(); }
     drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null;
     drag.preState=null; drag.preSelected=null; drag.moved=false;
@@ -2169,7 +2394,8 @@ async function initApp(forceSeed=false){
       minorColor: (ui.grid||{}).minorColor ?? DEFAULT_UI.grid.minorColor,
       majorColor: (ui.grid||{}).majorColor ?? DEFAULT_UI.grid.majorColor,
       minorOpacity: (ui.grid||{}).minorOpacity ?? DEFAULT_UI.grid.minorOpacity,
-      majorOpacity: (ui.grid||{}).majorOpacity ?? DEFAULT_UI.grid.majorOpacity
+      majorOpacity: (ui.grid||{}).majorOpacity ?? DEFAULT_UI.grid.majorOpacity,
+      snapEnabled: (ui.grid||{}).snapEnabled ?? DEFAULT_UI.grid.snapEnabled
     };
   }
 
@@ -2230,4 +2456,3 @@ function initPanZoom(){
   });
   window.addEventListener("mouseup",()=>{pan.active=false;});
 }
-
