@@ -14,14 +14,51 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 - Visualize layouts on a canvas with basic editing tools
 - Export layouts to multiple formats via exporter modules
 
+## Glossary
+
+Use these terms consistently in docs, bug reports, PRs, and discussion.
+
+### Data model terms
+- **Project**: top-level file payload (`schemaVersion`, `activeId`, `structures`)
+- **Structure**: one building/unit within a project (`structures[]`)
+- **Floor**: one level inside a structure (`house.floors[]`)
+- **Room**: rectangular space inside a floor (`floor.rooms[]`)
+- **Item Instance** (or **Item** in UI): placed object inside a room (`room.items[]`)
+- **Item Type**: reusable definition in `structure.types` (defaults like size/color/height)
+- **Geometry**: `xIn`, `yIn`, `wIn`, `hIn`, `heightIn`, `corner`
+
+### Geometry and coordinate terms
+- **Units source**: persisted geometry values are interpreted by `structure.viewConfiguration.units` (`imperial` or `metric`)
+- **Global origin**: canvas top-left, with +X right and +Y down
+- **Room coordinates**: floor-relative
+- **Item coordinates**: room-relative before normalization
+- **Corner anchor**: `corner` (`NW`, `NE`, `SW`, `SE`) defines which rectangle corner `xIn`/`yIn` refer to
+- **Normalization**: convert any corner-anchored rectangle to NW absolute rect for rendering/export
+
+### Left sidebar panel names
+Use these exact names when referring to UI sections:
+- `Selected`
+- `Add New Item`
+- `View`
+- `Floors`
+- `Elements Visibility / Order`
+- `Label Visibility`
+- `Counts`
+- `Configuration`
+- `Export / Import`
+- `Help / About`
+
 ---
 
 ## TODO List
 
 ### Core editing enhancements (easy → medium)
-- **Define nomenclature**
-  - Standard terms for: structure, floor, room, item/object, type, instance
-  - Document canonical coordinate system and corner semantics
+- **Cleanup work needed to align application with glossary terms**
+  - Standardize visible UI copy (`object` vs `item`, `element` vs `item`, capitalization of panel names)
+  - Align internal code variable naming where low-risk (`HOUSE`/`house` vs `structure` terminology)
+  - Add a README sidebar panel reference table (panel name, purpose, key actions, primary data affected)
+  - Update exporter/docs language so data model and UI references match glossary terms
+  - Add a bug-report reference convention in docs (example: `[Sidebar > Configuration] Door default width not applied`)
 - **Additional keyboard shortcuts**
   - Select All: Ctrl + A — Quickly selects every element in the current layout.
   - Group / Ungroup: Ctrl + G to group selected elements and Ctrl + Shift + G to ungroup them.
