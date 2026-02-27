@@ -119,6 +119,7 @@
         url: window.location.href,
         dateTime: new Date().toISOString(),
         schemaVersion: SCHEMA_VERSION,
+        defaultConfiguration: clone.defaultConfiguration || null,
         activeId: clone.activeId,
         structures: clone.structures.map(s => stripStructure(s, typeDefaults))
       };

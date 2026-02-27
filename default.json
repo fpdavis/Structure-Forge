@@ -1,10 +1,34 @@
 {
   "schemaVersion": 6,
   "activeId": "00000001",
+  "defaultConfiguration": {
+    "units": "imperial",
+    "scale": 3,
+    "showGrid": true,
+    "showMinor": true,
+    "gridSize": 6,
+    "gridType": "line",
+    "minorColor": "#ffffff",
+    "majorColor": "#ffffff",
+    "minorOpacity": 0.18,
+    "majorOpacity": 0.4
+  },
   "structures": [
     {
       "id": "00000001",
       "name": "Average 2-Story House (Basement + 2-Car Garage)",
+      "viewConfiguration": {
+        "units": "imperial",
+        "scale": 3,
+        "showGrid": true,
+        "showMinor": true,
+        "gridSize": 6,
+        "gridType": "line",
+        "minorColor": "#ffffff",
+        "majorColor": "#ffffff",
+        "minorOpacity": 0.18,
+        "majorOpacity": 0.4
+      },
       "house": {
         "floors": [
           {

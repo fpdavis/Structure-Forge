@@ -1,5 +1,8 @@
 
 const STORAGE_KEY="house-layout-viewer:v6";
+
+// Persistence
+const AUTO_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 let APP=null, ACTIVE=null, HOUSE=null;
 
 const DEFAULT_UI={
@@ -21,6 +24,9 @@ const state={
   ppi:DEFAULT_UI.ppi,
   units:DEFAULT_UI.units,
   grid:JSON.parse(JSON.stringify(DEFAULT_UI.grid)),
+  dirty:false,
+  lastSavedAt:0,
+  autoSaveTimer:null,
   visibleFloors:new Set(),
   visibleTypes:new Set(),
   visibleLabels:{},
@@ -85,7 +91,8 @@ function _applyHistorySnap(snap){
   HOUSE = ACTIVE.house;
   state.selected = snap.selected ? JSON.parse(JSON.stringify(snap.selected)) : null;
   state.selectedSnapshot = null;
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
 }
 
 function undoHistory(){
@@ -125,6 +132,64 @@ function formatLinear(v){
   return state.units==="metric" ? formatMetricLabel(v) : formatFeetInches(v);
 }
 function inputUnitLabel(){ return state.units==="metric" ? "mm" : "in"; }
+
+function _snapshotViewConfiguration(){
+  return {
+    units: state.units,
+    scale: state.ppi,
+    showGrid: !!state.grid.enabled,
+    showMinor: !!state.grid.showMinor,
+    gridSize: Number(state.grid.minorStep),
+    gridType: String(state.grid.style||"line"),
+    minorColor: String(state.grid.minorColor||"#ffffff"),
+    majorColor: String(state.grid.majorColor||"#ffffff"),
+    minorOpacity: Number(state.grid.minorOpacity),
+    majorOpacity: Number(state.grid.majorOpacity)
+  };
+}
+
+function _applyViewConfiguration(cfg){
+  if(!cfg) return;
+  if(cfg.units==="imperial"||cfg.units==="metric") state.units=cfg.units;
+  if(Number.isFinite(cfg.scale)) state.ppi=clamp(Math.round(cfg.scale),1,10);
+  if(cfg.showGrid!=null) state.grid.enabled=!!cfg.showGrid;
+  if(cfg.showMinor!=null) state.grid.showMinor=!!cfg.showMinor;
+  if(Number.isFinite(cfg.gridSize)) state.grid.minorStep=Number(cfg.gridSize);
+  if(typeof cfg.gridType==="string") state.grid.style=cfg.gridType;
+  if(typeof cfg.minorColor==="string") state.grid.minorColor=cfg.minorColor;
+  if(typeof cfg.majorColor==="string") state.grid.majorColor=cfg.majorColor;
+  if(Number.isFinite(cfg.minorOpacity)) state.grid.minorOpacity=clamp(Number(cfg.minorOpacity),0,1);
+  if(Number.isFinite(cfg.majorOpacity)) state.grid.majorOpacity=clamp(Number(cfg.majorOpacity),0,1);
+}
+
+function _applyViewConfigurationFromActive(){
+  const cfg = ACTIVE?.viewConfiguration || APP?.defaultConfiguration || null;
+  _applyViewConfiguration(cfg);
+  rebuildGridSizeOptions();
+  syncViewPanelUI();
+}
+
+function saveViewDefaults(){
+  APP.defaultConfiguration=_snapshotViewConfiguration();
+  markDirty();
+}
+
+function _commitViewConfiguration(){
+  if(ACTIVE) ACTIVE.viewConfiguration=_snapshotViewConfiguration();
+  markDirty();
+}
+
+function loadViewDefaults(){
+  if(!APP.defaultConfiguration) return;
+  _applyViewConfiguration(APP.defaultConfiguration);
+  if(ACTIVE) ACTIVE.viewConfiguration=_snapshotViewConfiguration();
+  rebuildGridSizeOptions();
+  syncViewPanelUI();
+  buildSelectedForm();
+  buildConfigForm();
+  render();
+  markDirty();
+}
 
 const GRID_SIZES_IMPERIAL=[
   {v:3,  label:'3" — Trim & molding detail'},
@@ -221,20 +286,37 @@ function markerAbsPos(objNW, obj, corner){
 
 function oppositeCorner(c){ return c==="NW"?"SE":c==="SE"?"NW":c==="NE"?"SW":"NE"; }
 function setStatus(msg){ const el=document.getElementById("storageStatus"); if(el) el.textContent=msg; }
-function saveApp(){
+
+function _fmtTime(d){
+  const hh=String(d.getHours()).padStart(2,"0");
+  const mm=String(d.getMinutes()).padStart(2,"0");
+  return `${hh}:${mm}`;
+}
+
+function markDirty(){
+  state.dirty=true;
+  setStatus("Storage: pending");
+}
+
+function saveNow(){
   try{
     if(!APP) return;
-    APP.ui = {
-      ...(APP.ui||{}),
-      ppi: state.ppi,
-      units: state.units,
-      grid: JSON.parse(JSON.stringify(state.grid))
-    };
+
+    if(!APP.defaultConfiguration) APP.defaultConfiguration=_snapshotViewConfiguration();
+    if(ACTIVE) ACTIVE.viewConfiguration=_snapshotViewConfiguration();
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(APP));
-    setStatus("Storage: saved");
+    state.dirty=false;
+    state.lastSavedAt=Date.now();
+    setStatus(`Storage: saved ${_fmtTime(new Date(state.lastSavedAt))}`);
   } catch {
     setStatus("Storage: failed to save");
   }
+}
+
+function startAutoSave(){
+  if(state.autoSaveTimer) return;
+  state.autoSaveTimer=setInterval(()=>{ if(state.dirty) saveNow(); }, AUTO_SAVE_INTERVAL_MS);
 }
 /**
  * Re-inflate all fields that the v6 JSON exporter strips for compactness.
@@ -248,39 +330,56 @@ function saveApp(){
  *            name default = type,
  *            wIn/hIn/heightIn restored from type defaults when absent
  */
-function hydrateApp(parsed){
-  for(const s of (parsed.structures||[])){
-    // --- Normalise types: list → keyed object ---
-    if(Array.isArray(s.types)){
-      const obj={};
-      for(const t of s.types){ if(t&&t.name){ const {name,...rest}=t; obj[name]=rest; } }
-      s.types=obj;
-    }
-    const td=s.types||{};
+function _hydrateStructure(s){
+  if(!s || s._hydrated) return;
 
-    for(const floor of (s.house?.floors||[])){
-      for(const room of (floor.rooms||[])){
-        if(!room.corner)  room.corner  = "NW";
-        if(!room.type)    room.type    = "Room";
-        if(!room.floorId) room.floorId = floor.id;
-        for(const item of (room.items||[])){
-          if(!item.corner)  item.corner  = "NW";
-          if(!item.roomId)  item.roomId  = room.id;
-          if(!item.name)    item.name    = item.type;
-          // Restore dimension defaults from type config
-          const st=td[item.type]||{};
-          if(item.wIn      == null && st.defaultWIn      != null) item.wIn      = st.defaultWIn;
-          if(item.hIn      == null && st.defaultHIn      != null) item.hIn      = st.defaultHIn;
-          if(item.heightIn == null && st.defaultHeightIn != null) item.heightIn = st.defaultHeightIn;
-        }
+  // --- Normalise types: list → keyed object ---
+  if(Array.isArray(s.types)){
+    const obj={};
+    for(const t of s.types){ if(t&&t.name){ const {name,...rest}=t; obj[name]=rest; } }
+    s.types=obj;
+  }
+  const td=s.types||{};
+
+  for(const floor of (s.house?.floors||[])){
+    for(const room of (floor.rooms||[])){
+      if(!room.corner)  room.corner  = "NW";
+      if(!room.type)    room.type    = "Room";
+      if(!room.floorId) room.floorId = floor.id;
+      for(const item of (room.items||[])){
+        if(!item.corner)  item.corner  = "NW";
+        if(!item.roomId)  item.roomId  = room.id;
+        if(!item.name)    item.name    = item.type;
+        // Restore dimension defaults from type config
+        const st=td[item.type]||{};
+        if(item.wIn      == null && st.defaultWIn      != null) item.wIn      = st.defaultWIn;
+        if(item.hIn      == null && st.defaultHIn      != null) item.hIn      = st.defaultHIn;
+        if(item.heightIn == null && st.defaultHeightIn != null) item.heightIn = st.defaultHeightIn;
       }
     }
   }
+  s._hydrated=true;
+}
+
+function hydrateApp(parsed, activeId){
+  // Only inflate the active structure to avoid unnecessary memory expansion.
+  const structures=(parsed.structures||[]);
+  const id = activeId || parsed.activeId || structures[0]?.id;
+  const active = structures.find(x=>x.id===id) || structures[0];
+  if(active) _hydrateStructure(active);
   return parsed;
 }
 
-function loadApp(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return null; const parsed=JSON.parse(raw);
-    if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0) return null; return hydrateApp(parsed); } catch { return null; } }
+function loadApp(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed||!Array.isArray(parsed.structures)||parsed.structures.length===0) return null;
+    const activeId=parsed.activeId || parsed.structures[0].id;
+    return hydrateApp(parsed, activeId);
+  } catch { return null; }
+}
 
 function applyDefaultsToObj(o){
   const st=ACTIVE.types[o.type] || (ACTIVE.types[o.type]=genDefaultStyle(Object.keys(ACTIVE.types).length));
@@ -339,6 +438,7 @@ function seedApp(){
 function setActiveStructure(id){
   APP.activeId=id;
   ACTIVE=APP.structures.find(s=>s.id===id) || APP.structures[0];
+  _hydrateStructure(ACTIVE);
   APP.activeId=ACTIVE.id;
   HOUSE=ACTIVE.house;
 
@@ -352,7 +452,9 @@ function setActiveStructure(id){
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   state.selected=null; state.selectedSnapshot=null;
 
-  buildAll(); render(); saveApp();
+  _applyViewConfigurationFromActive();
+
+  buildAll(); render();
 }
 
 function buildStructureUI(){
@@ -362,10 +464,10 @@ function buildStructureUI(){
   for(const s of APP.structures){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; sel.appendChild(o); }
   sel.value=ACTIVE.id; name.value=ACTIVE.name;
 }
-function newStructure(){ const id=guid(); const seeded=seedApp(); const struct=seeded.structures[0]; struct.id=id; struct.name="New Structure"; APP.structures.push(struct); setActiveStructure(id); }
+function newStructure(){ const id=guid(); const seeded=seedApp(); const struct=seeded.structures[0]; struct.id=id; struct.name="New Structure"; APP.structures.push(struct); setActiveStructure(id); markDirty(); }
 function deleteStructure(){ if(APP.structures.length<=1){ alert("There must always be at least one structure."); return; }
   if(!confirm(`Delete structure "${ACTIVE.name}"?`)) return;
-  const idx=APP.structures.findIndex(s=>s.id===ACTIVE.id); if(idx>=0) APP.structures.splice(idx,1); setActiveStructure(APP.structures[0].id); saveApp(); }
+  const idx=APP.structures.findIndex(s=>s.id===ACTIVE.id); if(idx>=0) APP.structures.splice(idx,1); setActiveStructure(APP.structures[0].id); markDirty(); }
 function resetStorage(){ if(!confirm("Reset stored data? This cannot be undone.")) return; localStorage.removeItem(STORAGE_KEY); APP=null; initApp(true); }
 
 function findFloor(floorId){ return HOUSE.floors.find(f=>f.id===floorId)||null; }
@@ -384,7 +486,7 @@ const ROOM_FIELDS=[
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
-  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.01"}
+  {key:"fillAlpha",label:"Fill Opacity",kind:"range",min:"0",max:"1",step:"0.01"}
 ];
 const ITEM_FIELDS=[
   {key:"type",label:"Type",kind:"selectDynamic"},
@@ -399,7 +501,7 @@ const ITEM_FIELDS=[
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
-  {key:"fillAlpha",label:"Fill Opacity (0..1)",kind:"number",step:"0.1"}
+  {key:"fillAlpha",label:"Fill Opacity",kind:"range",min:"0",max:"1",step:"0.01"}
 ];
 
 function buildSelectedForm(){
@@ -431,6 +533,15 @@ function buildSelectedForm(){
       const hx=cssColorToHex(v); if(hx) pick.value=hx;
       pick.addEventListener("input",()=>{txt.value=pick.value.toLowerCase();});
       txt.addEventListener("input",()=>{ const h=cssColorToHex(txt.value); if(h) pick.value=h; });
+      txt.addEventListener("change",()=>{
+        if(isValidCssColorToken(txt.value)){
+          obj[f.key]=txt.value.trim();
+          buildAll();
+          render();
+          markDirty();
+          pushHistory();
+        }
+      });
       row.appendChild(txt); row.appendChild(pick);
       box.appendChild(lab); box.appendChild(row);
       wrap.appendChild(box);
@@ -444,8 +555,19 @@ function buildSelectedForm(){
       input=document.createElement("select");
       for(const opt of ACTIVE.typeOrder.filter(t=>t!=="Room")){ const o=document.createElement("option"); o.value=opt; o.textContent=opt; input.appendChild(o); }
     } else {
-      input=document.createElement("input"); input.type=f.kind==="number"?"number":"text";
-	  if(f.kind==="number") input.step=f.step||"0.5";
+      input=document.createElement("input");
+      if(f.kind==="number"){
+        input.type="number";
+        input.step=f.step||"0.5";
+      } else if(f.kind==="range"){
+        input.type="range";
+        input.min=f.min||"0";
+        input.max=f.max||"1";
+        input.step=f.step||"0.01";
+        input.classList.add("sf-rangeFull");
+      } else {
+        input.type="text";
+      }
     }
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
@@ -456,6 +578,30 @@ function buildSelectedForm(){
       v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
     }
     input.value=v;
+
+    const commitValue=(isLive)=>{
+      const raw=input.value;
+      if(f.kind==="number" || f.kind==="range"){
+        const num=parseFloat(raw);
+        if(Number.isFinite(num)) obj[f.key]=num;
+      } else {
+        obj[f.key]=raw;
+      }
+      if(state.selected.kind==="room") applyDefaultsToObj(obj);
+      else { ensureTypeExists(obj.type); applyDefaultsToObj(obj); }
+      buildAll();
+      render();
+      markDirty();
+      if(!isLive) pushHistory();
+    };
+
+    if(f.kind==="range"){
+      input.addEventListener("input",()=>commitValue(true));
+      input.addEventListener("change",()=>commitValue(false));
+    } else {
+      input.addEventListener("change",()=>commitValue(false));
+    }
+
     box.appendChild(lab); box.appendChild(input);
     wrap.appendChild(box);
   }
@@ -469,39 +615,12 @@ function buildSelectedForm(){
     calc.innerHTML=`<div class="subtle">Area: <strong style="color:var(--text);">${escapeXml(formatSqFt(areaIn2))} ft²</strong> (${escapeXml(Math.round(areaIn2).toString())} in²) &nbsp;·&nbsp; Perimeter: <strong style="color:var(--text);">${escapeXml(formatLinear(perimIn))}</strong> (${escapeXml(Math.round(perimIn).toString())} ${escapeXml(inputUnitLabel())})</div>`;
     wrap.appendChild(calc);
   }
-  state.selectedSnapshot=JSON.parse(JSON.stringify(obj));
+  state.selectedSnapshot=null;
 }
 
 function setSelected(sel){ state.selected=sel; buildSelectedForm(); render(); }
 
-function resetSelectedForm(){
-  if(!state.selectedSnapshot||!state.selected) return;
-  if(state.selected.kind==="room"){ const res=findRoom(state.selected.roomId); if(!res) return; Object.assign(res.room, JSON.parse(JSON.stringify(state.selectedSnapshot))); }
-  else { const res=findItem(state.selected.itemId); if(!res) return; Object.assign(res.item, JSON.parse(JSON.stringify(state.selectedSnapshot))); }
-  buildSelectedForm(); render(); saveApp();
-  pushHistory();
-}
-function saveSelectedForm(){
-  if(!state.selected) return;
-  if(state.selected.kind==="room"){
-    const res=findRoom(state.selected.roomId); if(!res) return; const room=res.room;
-    for(const f of ROOM_FIELDS){ const v=document.getElementById(`sel_${f.key}`)?.value; if(v==null) continue;
-      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) room[f.key]=num; }
-      else if(f.kind==="color"){ if(isValidCssColorToken(v)) room[f.key]=v.trim(); }
-      else { room[f.key]=v; } }
-    applyDefaultsToObj(room);
-  } else {
-    const res=findItem(state.selected.itemId); if(!res) return; const it=res.item;
-    for(const f of ITEM_FIELDS){ const v=document.getElementById(`sel_${f.key}`)?.value; if(v==null) continue;
-      if(f.kind==="number"){ const num=parseFloat(v); if(Number.isFinite(num)) it[f.key]=num; }
-      else if(f.kind==="color"){ if(isValidCssColorToken(v)) it[f.key]=v.trim(); }
-      else { it[f.key]=v; } }
-    ensureTypeExists(it.type);
-    applyDefaultsToObj(it);
-  }
-  buildAll(); render(); saveApp();
-  pushHistory();
-}
+// Selected edits live-commit; no explicit Save/Reset/Clear controls.
 
 function copySelected(){
   if(!state.selected){ clipboard.kind=null; clipboard.data=null; clipboard.source={floorId:null,roomId:null}; return; }
@@ -533,7 +652,8 @@ function cutSelected(){
     res.room.items=res.room.items.filter(i=>i.id!==res.item.id);
   }
   state.selected=null; state.selectedSnapshot=null;
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 
@@ -587,7 +707,8 @@ function pasteClipboard(){
     setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
   }
 
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 
@@ -613,7 +734,8 @@ function duplicateSelected(){
     res.room.items.push(copy);
     setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
   }
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 function deleteSelected(){
@@ -628,7 +750,8 @@ function deleteSelected(){
     res.room.items=res.room.items.filter(i=>i.id!==res.item.id);
   }
   state.selected=null; state.selectedSnapshot=null;
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 
@@ -636,7 +759,7 @@ function updateFloorSummary(){
   const visible=HOUSE.floors.filter(f=>state.visibleFloors.has(f.id)).length;
   const el=document.getElementById("floorSummary"); if(el) el.textContent=`${visible}/${HOUSE.floors.length}`;
 }
-function addFloor(){ const id=guid(); HOUSE.floors.push({id,name:"New Floor",rooms:[]}); state.visibleFloors.add(id); buildAll(); render(); saveApp(); pushHistory(); }
+function addFloor(){ const id=guid(); HOUSE.floors.push({id,name:"New Floor",rooms:[]}); state.visibleFloors.add(id); buildAll(); render(); markDirty(); pushHistory(); }
 
 function moveFloor(floorId, delta){
   const idx=HOUSE.floors.findIndex(f=>f.id===floorId);
@@ -645,7 +768,8 @@ function moveFloor(floorId, delta){
   if(tgt===idx) return;
   const [f]=HOUSE.floors.splice(idx,1);
   HOUSE.floors.splice(tgt,0,f);
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 function deleteFloor(floorId){
@@ -662,7 +786,8 @@ This deletes ${floor.rooms.length} room(s) and all nested items.`)) return;
   }
   HOUSE.floors.splice(idx,1); state.visibleFloors.delete(floorId);
   if(state.visibleFloors.size===0 && HOUSE.floors[0]) state.visibleFloors.add(HOUSE.floors[0].id);
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 function buildFloorToggles(){
@@ -670,9 +795,16 @@ function buildFloorToggles(){
   for(const floor of HOUSE.floors){
     const row=document.createElement("div"); row.className="floorRow";
     const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=state.visibleFloors.has(floor.id);
-    cb.addEventListener("change",()=>{cb.checked?state.visibleFloors.add(floor.id):state.visibleFloors.delete(floor.id); updateFloorSummary(); render(); saveApp();});
+    cb.addEventListener("change",()=>{cb.checked?state.visibleFloors.add(floor.id):state.visibleFloors.delete(floor.id); updateFloorSummary(); render();});
     const nameBox=document.createElement("input"); nameBox.type="text"; nameBox.value=floor.name;
     nameBox.dataset.floorId=floor.id;
+    nameBox.addEventListener("change",()=>{
+      floor.name=nameBox.value||"(unnamed floor)";
+      updateFloorSummary();
+      buildAll();
+      render();
+      markDirty();
+    });
     const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.innerHTML="&#128465;";
     del.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); deleteFloor(floor.id);});
     const iconWrap=document.createElement("div"); iconWrap.className="row"; iconWrap.style.gap="8px";
@@ -701,7 +833,7 @@ function moveType(type,delta){
   const arr=ACTIVE.typeOrder; const idx=arr.indexOf(type); if(idx<0) return;
   const tgt=clamp(idx+delta,1,arr.length-1); if(tgt===idx) return;
   arr.splice(idx,1); arr.splice(tgt,0,type);
-  buildAll(); render(); saveApp();
+  buildAll(); render();
 }
 function buildTypeToggles(){
   const wrap=document.getElementById("typeToggles"); wrap.innerHTML="";
@@ -711,7 +843,7 @@ function buildTypeToggles(){
     const row=document.createElement("div"); row.className="checkbox"; row.style.justifyContent="space-between";
     const left=document.createElement("div"); left.className="row";
     const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=state.visibleTypes.has(t);
-    cb.addEventListener("change",()=>{cb.checked?state.visibleTypes.add(t):state.visibleTypes.delete(t); render(); saveApp();});
+    cb.addEventListener("change",()=>{cb.checked?state.visibleTypes.add(t):state.visibleTypes.delete(t); render();});
     const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
     const txt=document.createElement("div"); txt.innerHTML=`<div style="font-weight:700;">${escapeXml(t)}</div>`;
     left.appendChild(cb); left.appendChild(sw); left.appendChild(txt);
@@ -731,7 +863,7 @@ function buildLabelToggles(){
     const st=ACTIVE.types[t];
     const lbl=document.createElement("label"); lbl.className="checkbox";
     const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isLabelVisible(t);
-    cb.addEventListener("change",()=>{state.visibleLabels[t]=cb.checked; render(); saveApp();});
+    cb.addEventListener("change",()=>{state.visibleLabels[t]=cb.checked; render();});
     const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
     const txt=document.createElement("div"); txt.innerHTML=`<div style="font-weight:700;">${escapeXml(t)}</div>`;
     lbl.appendChild(cb); lbl.appendChild(sw); lbl.appendChild(txt);
@@ -765,8 +897,35 @@ function deleteType(type){
   const idx=ACTIVE.typeOrder.indexOf(type); if(idx>=0) ACTIVE.typeOrder.splice(idx,1);
   state.visibleTypes.delete(type); delete state.visibleLabels[type];
   if(state.selected && state.selected.kind==="item"){ const res=findItem(state.selected.itemId); if(!res){ state.selected=null; state.selectedSnapshot=null; } }
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
+}
+
+function renameType(oldName,newName){
+  if(oldName===newName) return true;
+  if(!newName) return false;
+  if(oldName==="Room" || newName==="Room") return false;
+  if(ACTIVE.typeOrder.includes(newName) || ACTIVE.types[newName]) return false;
+
+  // move style
+  ACTIVE.types[newName]=ACTIVE.types[oldName];
+  delete ACTIVE.types[oldName];
+
+  const idx=ACTIVE.typeOrder.indexOf(oldName);
+  if(idx>=0) ACTIVE.typeOrder[idx]=newName;
+
+  if(state.visibleTypes.has(oldName)){ state.visibleTypes.delete(oldName); state.visibleTypes.add(newName); }
+  if(state.visibleLabels[oldName]!==undefined){ state.visibleLabels[newName]=state.visibleLabels[oldName]; delete state.visibleLabels[oldName]; }
+
+  for(const f of HOUSE.floors){
+    for(const r of f.rooms){
+      for(const it of r.items){
+        if(it.type===oldName) it.type=newName;
+      }
+    }
+  }
+  return true;
 }
 
 function buildConfigForm(){
@@ -789,7 +948,8 @@ function buildConfigForm(){
       sw.style.background=st.defaultLineColor;
       const lineInp=document.getElementById(`cfg_${id}_defaultLineColor`); if(lineInp) lineInp.value=st.defaultLineColor;
       const linePick=document.getElementById(`cfg_${id}_defaultLineColor_picker`); if(linePick) linePick.value=st.defaultLineColor;
-      buildTypeToggles(); buildLabelToggles(); renderCounts(); saveApp();
+      buildTypeToggles(); buildLabelToggles(); renderCounts();
+      markDirty();
     });
     swWrap.appendChild(sw); swWrap.appendChild(swPick);
 
@@ -850,7 +1010,7 @@ function buildConfigForm(){
     grid.appendChild(makeColor("Default Fill Color","defaultFillColor"));
 
     const fa=document.createElement("div"); fa.className="field";
-    fa.innerHTML=`<label>Default Fill Opacity (0..1)</label><input id="cfg_${id}_fillAlpha" type="number" step="0.01" value="${escapeXml(st.defaultFillAlpha ?? 1)}" />`;
+    fa.innerHTML=`<label>Default Fill Opacity</label><input id="cfg_${id}_fillAlpha" type="range" min="0" max="1" step="0.01" value="${escapeXml(st.defaultFillAlpha ?? 1)}" class="sf-rangeFull" />`;
     grid.appendChild(fa);
 
     const defW=document.createElement("div"); defW.className="field";
@@ -869,6 +1029,42 @@ function buildConfigForm(){
     block.appendChild(head);
     block.appendChild(body);
     wrap.appendChild(block);
+
+    // Live-commit changes (no explicit Save button)
+    const applyStyle=()=>{ buildTypeToggles(); buildLabelToggles(); renderCounts(); render(); markDirty(); };
+    const lineTxt=document.getElementById(`cfg_${id}_defaultLineColor`);
+    const cornerTxt=document.getElementById(`cfg_${id}_defaultCornerColor`);
+    const fillTxt=document.getElementById(`cfg_${id}_defaultFillColor`);
+    const widthInp=document.getElementById(`cfg_${id}_width`);
+    const faInp=document.getElementById(`cfg_${id}_fillAlpha`);
+    const defWInp=document.getElementById(`cfg_${id}_defW`);
+    const defHInp=document.getElementById(`cfg_${id}_defH`);
+    const defZInp=document.getElementById(`cfg_${id}_defZ`);
+
+    lineTxt?.addEventListener("change",()=>{ if(isValidCssColorToken(lineTxt.value)) st.defaultLineColor=lineTxt.value.trim(); applyStyle(); });
+    cornerTxt?.addEventListener("change",()=>{ if(isValidCssColorToken(cornerTxt.value)) st.defaultCornerColor=cornerTxt.value.trim(); applyStyle(); });
+    fillTxt?.addEventListener("change",()=>{ if(isValidCssColorToken(fillTxt.value)) st.defaultFillColor=fillTxt.value.trim(); applyStyle(); });
+    widthInp?.addEventListener("change",()=>{ const v=parseInt(widthInp.value,10); if(Number.isFinite(v)) st.strokeWidth=v; applyStyle(); });
+    faInp?.addEventListener("input",()=>{ const v=parseFloat(faInp.value); if(Number.isFinite(v)) st.defaultFillAlpha=clamp(v,0,1); render(); markDirty(); });
+    defWInp?.addEventListener("change",()=>{ const v=parseFloat(defWInp.value); if(Number.isFinite(v)) st.defaultWIn=v; markDirty(); });
+    defHInp?.addEventListener("change",()=>{ const v=parseFloat(defHInp.value); if(Number.isFinite(v)) st.defaultHIn=v; markDirty(); });
+    defZInp?.addEventListener("change",()=>{ const v=parseFloat(defZInp.value); if(Number.isFinite(v)) st.defaultHeightIn=v; markDirty(); });
+
+    if(t!=="Room"){
+      const nameInp=document.getElementById(`cfg_${id}_name`);
+      const oldType=t;
+      nameInp?.addEventListener("change",()=>{
+        const next=(nameInp.value||"").trim();
+        if(!next){ nameInp.value=oldType; return; }
+        if(!renameType(oldType,next)) { nameInp.value=oldType; return; }
+        buildAll();
+        buildConfigForm();
+        buildSelectedForm();
+        render();
+        markDirty();
+        pushHistory();
+      });
+    }
   }
 }
 function resetConfig(){
@@ -876,7 +1072,8 @@ function resetConfig(){
   ACTIVE.types=seeded.types; ACTIVE.typeOrder=seeded.typeOrder;
   state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 function saveConfig(){
@@ -946,7 +1143,8 @@ function saveConfig(){
     if(Number.isFinite(defZ)) st.defaultHeightIn=defZ;
   }
 
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 function addType(){
@@ -960,7 +1158,8 @@ function addType(){
   state.visibleTypes.add(name);
   state.visibleLabels[name]=false;
   document.getElementById("newTypeName").value="";
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 
@@ -1032,7 +1231,8 @@ function addNew(){
     floor.rooms.push(r);
     state.visibleFloors.add(floor.id);
     setSelected({kind:"room", floorId:floor.id, roomId:r.id});
-    buildAll(); render(); saveApp();
+    buildAll(); render();
+    markDirty();
     pushHistory();
     return;
   }
@@ -1047,7 +1247,8 @@ function addNew(){
   applyDefaultsToObj(it);
   res.room.items.push(it);
   setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:it.id});
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  markDirty();
   pushHistory();
 }
 
@@ -1616,13 +1817,13 @@ function cycleGridSize(dir){
   state.grid.minorStep=opts[idx];
   syncViewPanelUI();
   render();
-  saveApp();
+  _commitViewConfiguration();
 }
 
 function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
-  ppi.addEventListener("input",()=>{state.ppi=parseInt(ppi.value,10); ppiValue.textContent=String(state.ppi); render(); saveApp();});
+  ppi.addEventListener("input",()=>{state.ppi=parseInt(ppi.value,10); ppiValue.textContent=String(state.ppi); render(); _commitViewConfiguration();});
 
   // ── Units (label mode only) ───────────────────────────────────────────
   const uImp=document.getElementById("unitsImperial");
@@ -1634,29 +1835,38 @@ function wire(){
     buildSelectedForm();
     buildConfigForm();
     render();
-    saveApp();
+    _commitViewConfiguration();
   }
   uImp?.addEventListener("change",()=>{ if(uImp.checked) applyUnits("imperial"); });
   uMet?.addEventListener("change",()=>{ if(uMet.checked) applyUnits("metric"); });
 
   // ── Grid UI ───────────────────────────────────────────────────────────
-  document.getElementById("gridEnabled")?.addEventListener("change",(ev)=>{ state.grid.enabled=!!ev.target.checked; render(); saveApp(); });
-  document.getElementById("gridStyle")?.addEventListener("change",(ev)=>{ state.grid.style=String(ev.target.value||"line"); render(); saveApp(); });
-  document.getElementById("gridShowMinor")?.addEventListener("change",(ev)=>{ state.grid.showMinor=!!ev.target.checked; render(); saveApp(); });
-  document.getElementById("gridMinorColor")?.addEventListener("input",(ev)=>{ state.grid.minorColor=String(ev.target.value||"#ffffff"); render(); saveApp(); });
-  document.getElementById("gridMajorColor")?.addEventListener("input",(ev)=>{ state.grid.majorColor=String(ev.target.value||"#ffffff"); render(); saveApp(); });
-  document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); saveApp(); });
-  document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); saveApp(); });
-  document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); saveApp(); });
+  document.getElementById("gridEnabled")?.addEventListener("change",(ev)=>{ state.grid.enabled=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  document.getElementById("gridStyle")?.addEventListener("change",(ev)=>{ state.grid.style=String(ev.target.value||"line"); render(); _commitViewConfiguration(); });
+  document.getElementById("gridShowMinor")?.addEventListener("change",(ev)=>{ state.grid.showMinor=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  document.getElementById("gridMinorColor")?.addEventListener("input",(ev)=>{ state.grid.minorColor=String(ev.target.value||"#ffffff"); render(); _commitViewConfiguration(); });
+  document.getElementById("gridMajorColor")?.addEventListener("input",(ev)=>{ state.grid.majorColor=String(ev.target.value||"#ffffff"); render(); _commitViewConfiguration(); });
+  document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
+  document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
+  document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); _commitViewConfiguration(); });
+
+  document.getElementById("viewSaveDefault")?.addEventListener("click",(e)=>{e.preventDefault(); saveViewDefaults();});
+  document.getElementById("viewLoadDefault")?.addEventListener("click",(e)=>{e.preventDefault(); loadViewDefaults();});
 
   document.getElementById("structureSelect").addEventListener("change",(e)=>setActiveStructure(e.target.value));
   document.getElementById("structureNew").addEventListener("click",(e)=>{e.preventDefault(); newStructure();});
   document.getElementById("structureDelete").addEventListener("click",(e)=>{e.preventDefault(); deleteStructure();});
   document.getElementById("storageReset").addEventListener("click",(e)=>{e.preventDefault(); resetStorage();});
 
-  document.getElementById("clearSel").addEventListener("click",(e)=>{e.preventDefault(); setSelected(null);});
-  document.getElementById("selReset").addEventListener("click",(e)=>{e.preventDefault(); resetSelectedForm();});
-  document.getElementById("selSave").addEventListener("click",(e)=>{e.preventDefault(); saveSelectedForm();});
+  document.getElementById("structureName")?.addEventListener("change",(e)=>{
+    const v=String(e.target.value||"").trim();
+    if(!v) { e.target.value=ACTIVE.name; return; }
+    ACTIVE.name=v;
+    buildStructureUI();
+    markDirty();
+  });
+
+  // Selected edits live-commit; keep only duplicate/delete controls.
   document.getElementById("selDuplicate").addEventListener("click",(e)=>{e.preventDefault(); duplicateSelected();});
   document.getElementById("selDelete").addEventListener("click",(e)=>{e.preventDefault(); deleteSelected();});
 
@@ -1673,7 +1883,8 @@ function wire(){
         state.selected=drag.preSelected?JSON.parse(JSON.stringify(drag.preSelected)):null;
         drag.preSelected=null;
         state.selectedSnapshot=null;
-        buildAll(); render(); saveApp();
+        buildAll(); render();
+        markDirty();
       }
       return;
     }
@@ -1734,7 +1945,7 @@ function wire(){
       state.grid.enabled=!state.grid.enabled;
       syncViewPanelUI();
       render();
-      saveApp();
+      _commitViewConfiguration();
       return;
     }
     if(ev.shiftKey && (ev.key==="="||ev.key==="+")){
@@ -1791,7 +2002,8 @@ function wire(){
         const rel=normalizeRectRelToRoomPrimary(res.item, res.room);
         setItemFromNW_Rel(res.item, res.room, rel.xIn+dx, rel.yIn+dy);
       }
-      buildSelectedForm(); render(); saveApp();
+      buildSelectedForm(); render();
+      markDirty();
       pushHistory();
     }
   });
@@ -1800,22 +2012,14 @@ function wire(){
   document.getElementById("newType").addEventListener("change",()=>populateNewItemSelectors());
   document.getElementById("addNew").addEventListener("click",(e)=>{e.preventDefault(); addNew();});
 
-  document.getElementById("showAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id)); buildFloorToggles(); render(); saveApp();});
-  document.getElementById("hideAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(); buildFloorToggles(); render(); saveApp();});
+  document.getElementById("showAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id)); buildFloorToggles(); render();});
+  document.getElementById("hideAllFloors").addEventListener("click",(e)=>{e.preventDefault(); state.visibleFloors=new Set(); buildFloorToggles(); render();});
   document.getElementById("addFloor").addEventListener("click",(e)=>{e.preventDefault(); addFloor();});
-  document.getElementById("saveFloorNames").addEventListener("click",(e)=>{e.preventDefault();
-    document.querySelectorAll("#floorToggles input[type=text]").forEach(inp=>{
-      if(!inp.dataset.floorId) return;
-      const floor=findFloor(inp.dataset.floorId); if(floor) floor.name=inp.value||"(unnamed floor)";
-    });
-    buildAll(); render(); saveApp();
-  });
 
-  document.getElementById("cfgReset").addEventListener("click",(e)=>{e.preventDefault(); resetConfig();});
-  document.getElementById("cfgSave").addEventListener("click",(e)=>{e.preventDefault(); saveConfig();});
+  // Floors/configuration commit changes immediately; no explicit Save/Reset buttons.
   document.getElementById("addType").addEventListener("click",(e)=>{e.preventDefault(); addType();});
 
-  document.getElementById("exportBtn").addEventListener("click",(e)=>{e.preventDefault(); exportAll();});
+  document.getElementById("exportBtn").addEventListener("click",(e)=>{e.preventDefault(); saveNow(); exportAll();});
   document.getElementById("importBtn").addEventListener("click",(e)=>{e.preventDefault(); importAll();});
   // Wire hidden file input for open-file import
   document.getElementById("importFileInput").addEventListener("change",function(){
@@ -1882,7 +2086,7 @@ function wire(){
     }
     if(!drag.raf){
       drag.raf=true;
-      requestAnimationFrame(()=>{drag.raf=false; render(); saveApp();});
+      requestAnimationFrame(()=>{drag.raf=false; render();});
     }
   });
   window.addEventListener("mouseup",()=>{
@@ -1952,15 +2156,24 @@ async function initApp(forceSeed=false){
   APP.activeId=ACTIVE.id;
   HOUSE=ACTIVE.house;
 
-  // Restore UI settings (if present)
-  const ui={...DEFAULT_UI, ...(APP.ui||{})};
-  state.ppi = clamp(parseInt(ui.ppi,10)||DEFAULT_UI.ppi, 1, 10);
-  state.units = (ui.units==="metric") ? "metric" : "imperial";
-  state.grid = {...DEFAULT_UI.grid, ...(ui.grid||{})};
-  if(state.grid.minorStep == null) state.grid.minorStep = DEFAULT_UI.grid.minorStep;
-  if(!["line","dot"].includes(state.grid.style)) state.grid.style = DEFAULT_UI.grid.style;
-  state.grid.minorOpacity = clamp(Number(state.grid.minorOpacity),0,1);
-  state.grid.majorOpacity = clamp(Number(state.grid.majorOpacity),0,1);
+  // Restore view defaults (back-compat with legacy APP.ui)
+  if(!APP.defaultConfiguration){
+    const ui={...DEFAULT_UI, ...(APP.ui||{})};
+    APP.defaultConfiguration={
+      units: (ui.units==="metric") ? "metric" : "imperial",
+      scale: clamp(parseInt(ui.ppi,10)||DEFAULT_UI.ppi, 1, 10),
+      showGrid: !!(ui.grid||{}).enabled,
+      showMinor: (ui.grid||{}).showMinor ?? DEFAULT_UI.grid.showMinor,
+      gridSize: (ui.grid||{}).minorStep ?? DEFAULT_UI.grid.minorStep,
+      gridType: (ui.grid||{}).style ?? DEFAULT_UI.grid.style,
+      minorColor: (ui.grid||{}).minorColor ?? DEFAULT_UI.grid.minorColor,
+      majorColor: (ui.grid||{}).majorColor ?? DEFAULT_UI.grid.majorColor,
+      minorOpacity: (ui.grid||{}).minorOpacity ?? DEFAULT_UI.grid.minorOpacity,
+      majorOpacity: (ui.grid||{}).majorOpacity ?? DEFAULT_UI.grid.majorOpacity
+    };
+  }
+
+  _applyViewConfigurationFromActive();
 
   if(!ACTIVE.types) ACTIVE.types={"Room":genDefaultStyle(0)};
   if(!ACTIVE.typeOrder) ACTIVE.typeOrder=["Room",...Object.keys(ACTIVE.types).filter(t=>t!=="Room")];
@@ -1969,7 +2182,9 @@ async function initApp(forceSeed=false){
   state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id));
   state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
-  buildAll(); render(); saveApp();
+  buildAll(); render();
+  setStatus(state.dirty?"Storage: pending":"Storage: up to date");
+  startAutoSave();
   // Seed the initial undo-history snapshot
   history.stack=[]; history.index=-1;
   pushHistory();
