@@ -10,6 +10,7 @@ const DEFAULT_UI={
   units:"imperial", // label mode only (no conversion)
   grid:{
     enabled:false,
+    mode:"off", // off | under | over
     style:"line", // line | dot
     minorStep:12,
     showMinor:true,
@@ -143,7 +144,8 @@ function _snapshotViewConfiguration(){
   return {
     units: state.units,
     scale: state.ppi,
-    showGrid: !!state.grid.enabled,
+    showGrid: !!(state.grid.mode && state.grid.mode!=="off"),
+    gridMode: String(state.grid.mode||"off"),
     showMinor: !!state.grid.showMinor,
     gridSize: Number(state.grid.minorStep),
     gridType: String(state.grid.style||"line"),
@@ -159,7 +161,12 @@ function _applyViewConfiguration(cfg){
   if(!cfg) return;
   if(cfg.units==="imperial"||cfg.units==="metric") state.units=cfg.units;
   if(Number.isFinite(cfg.scale)) state.ppi=clamp(Math.round(cfg.scale),1,10);
-  if(cfg.showGrid!=null) state.grid.enabled=!!cfg.showGrid;
+  if(typeof cfg.gridMode==="string" && ["off","under","over"].includes(cfg.gridMode)){
+    state.grid.mode=cfg.gridMode;
+  } else if(cfg.showGrid!=null){
+    state.grid.mode=cfg.showGrid ? "under" : "off";
+  }
+  state.grid.enabled = state.grid.mode!=="off";
   if(cfg.showMinor!=null) state.grid.showMinor=!!cfg.showMinor;
   if(Number.isFinite(cfg.gridSize)) state.grid.minorStep=Number(cfg.gridSize);
   if(typeof cfg.gridType==="string") state.grid.style=cfg.gridType;
@@ -1685,11 +1692,9 @@ function render(){
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
 
-    // Grid (underlay)
-    if(state.grid.enabled){
-      const gridGroup=buildGridGroup(widthPx,heightPx,ox,oy);
-      if(gridGroup) svg.appendChild(gridGroup);
-    }
+    // Grid (configurable layer)
+    const gridGroup = state.grid.mode==="off" ? null : buildGridGroup(widthPx,heightPx,ox,oy);
+    if(gridGroup && state.grid.mode==="under") svg.appendChild(gridGroup);
     // Label group — appended last so labels always render above all objects
     const labelGroup=document.createElementNS("http://www.w3.org/2000/svg","g");
     labelGroup.setAttribute("class","labelLayer");
@@ -1904,6 +1909,7 @@ function render(){
       }
     }
 
+    if(gridGroup && state.grid.mode==="over") svg.appendChild(gridGroup);
     svg.addEventListener("click",()=>setSelected(null));
     svg.appendChild(labelGroup);
     block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
@@ -1950,17 +1956,23 @@ function syncViewPanelUI(){
   const uMet=document.getElementById("unitsMetric");
   if(uImp) uImp.checked = state.units==="imperial";
   if(uMet) uMet.checked = state.units==="metric";
-  const ge=document.getElementById("gridEnabled");
-  if(ge) ge.checked=!!state.grid.enabled;
+  const gmSel=document.getElementById("gridMode");
+  if(gmSel) gmSel.value=state.grid.mode||"off";
   const gs=document.getElementById("gridStyle");
   if(gs) gs.value=state.grid.style;
   rebuildGridSizeOptions();
   const gm=document.getElementById("gridShowMinor");
   if(gm) gm.checked=!!state.grid.showMinor;
   const gmc=document.getElementById("gridMinorColor");
+  const gmcPick=document.getElementById("gridMinorColorPicker");
   if(gmc) gmc.value=state.grid.minorColor||"#ffffff";
+  const gmcHex=cssColorToHex(state.grid.minorColor||"#ffffff");
+  if(gmcPick && gmcHex) gmcPick.value=gmcHex;
   const gMaj=document.getElementById("gridMajorColor");
+  const gMajPick=document.getElementById("gridMajorColorPicker");
   if(gMaj) gMaj.value=state.grid.majorColor||"#ffffff";
+  const gMajHex=cssColorToHex(state.grid.majorColor||"#ffffff");
+  if(gMajPick && gMajHex) gMajPick.value=gMajHex;
   const gmo=document.getElementById("gridMinorOpacity");
   if(gmo) gmo.value=String(state.grid.minorOpacity ?? DEFAULT_UI.grid.minorOpacity);
   const gMajo=document.getElementById("gridMajorOpacity");
@@ -2008,11 +2020,39 @@ function wire(){
   uMet?.addEventListener("change",()=>{ if(uMet.checked) applyUnits("metric"); });
 
   // ── Grid UI ───────────────────────────────────────────────────────────
-  document.getElementById("gridEnabled")?.addEventListener("change",(ev)=>{ state.grid.enabled=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  const applyGridMode=(mode)=>{
+    state.grid.mode=["off","under","over"].includes(mode)?mode:"off";
+    state.grid.enabled=state.grid.mode!=="off";
+    render();
+    _commitViewConfiguration();
+  };
+  document.getElementById("gridMode")?.addEventListener("change",(ev)=>{ applyGridMode(String(ev.target.value||"off")); });
   document.getElementById("gridStyle")?.addEventListener("change",(ev)=>{ state.grid.style=String(ev.target.value||"line"); render(); _commitViewConfiguration(); });
   document.getElementById("gridShowMinor")?.addEventListener("change",(ev)=>{ state.grid.showMinor=!!ev.target.checked; render(); _commitViewConfiguration(); });
-  document.getElementById("gridMinorColor")?.addEventListener("input",(ev)=>{ state.grid.minorColor=String(ev.target.value||"#ffffff"); render(); _commitViewConfiguration(); });
-  document.getElementById("gridMajorColor")?.addEventListener("input",(ev)=>{ state.grid.majorColor=String(ev.target.value||"#ffffff"); render(); _commitViewConfiguration(); });
+
+  const wireGridColor=(textId,pickerId,key)=>{
+    const txt=document.getElementById(textId);
+    const pick=document.getElementById(pickerId);
+    if(!txt||!pick) return;
+    const read=()=>state.grid[key]||"#ffffff";
+    const syncPickerFromText=()=>{ const h=cssColorToHex(txt.value); if(h) pick.value=h; };
+    txt.value=read();
+    syncPickerFromText();
+    pick.addEventListener("input",()=>{ txt.value=pick.value.toLowerCase(); state.grid[key]=txt.value; render(); _commitViewConfiguration(); });
+    txt.addEventListener("input",syncPickerFromText);
+    txt.addEventListener("change",()=>{
+      if(isValidCssColorToken(txt.value)){
+        state.grid[key]=txt.value.trim();
+        render();
+        _commitViewConfiguration();
+      } else {
+        txt.value=read();
+        syncPickerFromText();
+      }
+    });
+  };
+  wireGridColor("gridMinorColor","gridMinorColorPicker","minorColor");
+  wireGridColor("gridMajorColor","gridMajorColorPicker","majorColor");
   document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridSnapEnabled")?.addEventListener("change",(ev)=>{ state.grid.snapEnabled=!!ev.target.checked; _commitViewConfiguration(); });
@@ -2110,7 +2150,11 @@ function wire(){
     // ── Grid shortcuts ────────────────────────────────────────────────────
     if(ev.shiftKey && (ev.key==="g"||ev.key==="G"||ev.key==="'"||ev.key==='"')){
       ev.preventDefault();
-      state.grid.enabled=!state.grid.enabled;
+      const order=["off","under","over"];
+      const cur=order.indexOf(state.grid.mode||"off");
+      const next=order[(cur+1+order.length)%order.length];
+      state.grid.mode=next;
+      state.grid.enabled=next!=="off";
       syncViewPanelUI();
       render();
       _commitViewConfiguration();
@@ -2388,6 +2432,7 @@ async function initApp(forceSeed=false){
       units: (ui.units==="metric") ? "metric" : "imperial",
       scale: clamp(parseInt(ui.ppi,10)||DEFAULT_UI.ppi, 1, 10),
       showGrid: !!(ui.grid||{}).enabled,
+      gridMode: (ui.grid||{}).enabled ? "under" : "off",
       showMinor: (ui.grid||{}).showMinor ?? DEFAULT_UI.grid.showMinor,
       gridSize: (ui.grid||{}).minorStep ?? DEFAULT_UI.grid.minorStep,
       gridType: (ui.grid||{}).style ?? DEFAULT_UI.grid.style,
