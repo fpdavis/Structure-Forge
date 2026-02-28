@@ -920,14 +920,15 @@ function buildFloorToggles(){
     });
     const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.innerHTML="&#128465;";
     del.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); deleteFloor(floor.id);});
-    const iconWrap=document.createElement("div"); iconWrap.className="row"; iconWrap.style.gap="8px";
     const grip=document.createElement("span");
     grip.className="dragGrip";
     grip.textContent="⋮⋮";
     grip.title="Drag to reorder floors";
-    iconWrap.appendChild(grip);
-    iconWrap.appendChild(del);
-    row.appendChild(cb); row.appendChild(nameBox); row.appendChild(iconWrap); wrap.appendChild(row);
+    row.appendChild(grip);
+    row.appendChild(cb);
+    row.appendChild(nameBox);
+    row.appendChild(del);
+    wrap.appendChild(row);
   }
   setupDragSort(wrap,(dragId,targetId)=>{
     const from=HOUSE.floors.findIndex((f)=>f.id===dragId);
@@ -1008,7 +1009,7 @@ function buildConfigForm(){
     const st=ACTIVE.types[t];
     const id=cssId(t);
     const block=document.createElement("div"); block.className="cfgBlock";
-    block.draggable=true;
+    block.draggable=t!=="Room";
     block.dataset.sortId=t;
 
     // ── Header ──────────────────────────────────────────────────────────────
@@ -1031,11 +1032,12 @@ function buildConfigForm(){
     swWrap.appendChild(sw); swWrap.appendChild(swPick);
 
     const headLeft=document.createElement("div"); headLeft.className="row"; headLeft.style.gap="10px";
+    const grip=document.createElement("span"); grip.className="dragGrip"; grip.textContent="⋮⋮"; grip.title="Drag to reorder item types";
     const titleEl=document.createElement("div"); titleEl.style.fontWeight="700"; titleEl.style.fontSize="13px"; titleEl.textContent=t;
+    if(t!=="Room") headLeft.appendChild(grip);
     headLeft.appendChild(swWrap); headLeft.appendChild(titleEl);
 
     const headRight=document.createElement("div"); headRight.className="row"; headRight.style.gap="6px";
-    const grip=document.createElement("span"); grip.className="dragGrip"; grip.textContent="⋮⋮"; grip.title="Drag to reorder item types";
     const arrow=document.createElement("span"); arrow.className="cfgArrow"; arrow.innerHTML="&#9654;";
 
     if(t!=="Room"){
@@ -1043,7 +1045,6 @@ function buildConfigForm(){
       delBtn.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); deleteType(t); });
       headRight.appendChild(delBtn);
     }
-    headRight.appendChild(grip);
     headRight.appendChild(arrow);
     head.appendChild(headLeft); head.appendChild(headRight);
 
@@ -1063,7 +1064,7 @@ function buildConfigForm(){
       body.appendChild(nm);
     }
 
-    const flags=document.createElement("div"); flags.className="grid2";
+    const grid=document.createElement("div"); grid.className="grid2";
     const visibleField=document.createElement("label"); visibleField.className="checkbox";
     const visibleCb=document.createElement("input"); visibleCb.type="checkbox"; visibleCb.checked=isTypeVisible(t);
     const visibleText=document.createElement("div"); visibleText.textContent="Visible";
@@ -1072,10 +1073,7 @@ function buildConfigForm(){
     const labelCb=document.createElement("input"); labelCb.type="checkbox"; labelCb.checked=isLabelVisible(t);
     const labelText=document.createElement("div"); labelText.textContent="Show Label";
     labelField.appendChild(labelCb); labelField.appendChild(labelText);
-    flags.appendChild(visibleField); flags.appendChild(labelField);
-    body.appendChild(flags);
-
-    const grid=document.createElement("div"); grid.className="grid2";
+    grid.appendChild(visibleField); grid.appendChild(labelField);
 
     const makeColor=(label, key)=>{
       const f=document.createElement("div"); f.className="field";
@@ -1169,6 +1167,7 @@ function buildConfigForm(){
     }
   }
   setupDragSort(wrap,(dragId,targetId)=>{
+    if(dragId==="Room" || targetId==="Room") return;
     const from=ACTIVE.typeOrder.indexOf(dragId);
     const to=ACTIVE.typeOrder.indexOf(targetId);
     if(from<0 || to<0 || from===to) return;
