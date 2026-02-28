@@ -470,7 +470,7 @@ function setActiveStructure(id){
   for(const t of ACTIVE.typeOrder) ensureTypeExists(t);
 
   state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id));
-  state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
+  state.visibleTypes=new Set(ACTIVE.typeOrder);
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   state.selected=null; state.selectedSnapshot=null;
 
@@ -847,17 +847,6 @@ function updateFloorSummary(){
 }
 function addFloor(){ const id=guid(); HOUSE.floors.push({id,name:"New Floor",rooms:[]}); state.visibleFloors.add(id); buildAll(); render(); markDirty(); pushHistory(); }
 
-function moveFloor(floorId, delta){
-  const idx=HOUSE.floors.findIndex(f=>f.id===floorId);
-  if(idx<0) return;
-  const tgt=clamp(idx+delta,0,HOUSE.floors.length-1);
-  if(tgt===idx) return;
-  const [f]=HOUSE.floors.splice(idx,1);
-  HOUSE.floors.splice(tgt,0,f);
-  buildAll(); render();
-  markDirty();
-  pushHistory();
-}
 function deleteFloor(floorId){
   const idx=HOUSE.floors.findIndex(f=>f.id===floorId);
   if(idx<0){ alert("Floor not found."); return; }
@@ -876,10 +865,48 @@ This deletes ${floor.rooms.length} room(s) and all nested items.`)) return;
   markDirty();
   pushHistory();
 }
+
+function setupDragSort(container, onMove){
+  if(container.dataset.dragSortBound==="1") return;
+  container.dataset.dragSortBound="1";
+  let dragId=null;
+  container.addEventListener("dragstart",(ev)=>{
+    const row=ev.target.closest("[data-sort-id]");
+    if(!row || !container.contains(row)) return;
+    if(ev.target.closest("input,button,select,textarea")){
+      ev.preventDefault();
+      return;
+    }
+    dragId=row.dataset.sortId;
+    row.classList.add("isDragging");
+    ev.dataTransfer.effectAllowed="move";
+    ev.dataTransfer.setData("text/plain", dragId);
+  });
+  container.addEventListener("dragover",(ev)=>{
+    const row=ev.target.closest("[data-sort-id]");
+    if(!row || !dragId || row.dataset.sortId===dragId) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect="move";
+  });
+  container.addEventListener("drop",(ev)=>{
+    const row=ev.target.closest("[data-sort-id]");
+    if(!row || !dragId || row.dataset.sortId===dragId) return;
+    ev.preventDefault();
+    onMove(dragId,row.dataset.sortId);
+    dragId=null;
+  });
+  container.addEventListener("dragend",()=>{
+    dragId=null;
+    container.querySelectorAll(".isDragging").forEach((el)=>el.classList.remove("isDragging"));
+  });
+}
+
 function buildFloorToggles(){
   const wrap=document.getElementById("floorToggles"); wrap.innerHTML="";
   for(const floor of HOUSE.floors){
     const row=document.createElement("div"); row.className="floorRow";
+    row.draggable=true;
+    row.dataset.sortId=floor.id;
     const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=state.visibleFloors.has(floor.id);
     cb.addEventListener("change",()=>{cb.checked?state.visibleFloors.add(floor.id):state.visibleFloors.delete(floor.id); updateFloorSummary(); render();});
     const nameBox=document.createElement("input"); nameBox.type="text"; nameBox.value=floor.name;
@@ -894,68 +921,29 @@ function buildFloorToggles(){
     const del=document.createElement("button"); del.type="button"; del.className="btn icon"; del.title="Delete floor"; del.innerHTML="&#128465;";
     del.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); deleteFloor(floor.id);});
     const iconWrap=document.createElement("div"); iconWrap.className="row"; iconWrap.style.gap="8px";
-    const up=document.createElement("button");
-    up.type="button";
-    up.className="btn icon";
-    up.title="Move floor up";
-    up.innerHTML="&#9650;";
-    up.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveFloor(floor.id,-1);});
-    const dn=document.createElement("button");
-    dn.type="button";
-    dn.className="btn icon";
-    dn.title="Move floor down";
-    dn.innerHTML="&#9660;";
-    dn.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveFloor(floor.id, 1);});
-    iconWrap.appendChild(up);
-    iconWrap.appendChild(dn);
+    const grip=document.createElement("span");
+    grip.className="dragGrip";
+    grip.textContent="⋮⋮";
+    grip.title="Drag to reorder floors";
+    iconWrap.appendChild(grip);
     iconWrap.appendChild(del);
     row.appendChild(cb); row.appendChild(nameBox); row.appendChild(iconWrap); wrap.appendChild(row);
   }
+  setupDragSort(wrap,(dragId,targetId)=>{
+    const from=HOUSE.floors.findIndex((f)=>f.id===dragId);
+    const to=HOUSE.floors.findIndex((f)=>f.id===targetId);
+    if(from<0 || to<0 || from===to) return;
+    const [moved]=HOUSE.floors.splice(from,1);
+    HOUSE.floors.splice(to,0,moved);
+    buildAll();
+    render();
+    markDirty();
+    pushHistory();
+  });
   updateFloorSummary();
 }
-function isTypeVisible(t){ return t==="Room"?true:state.visibleTypes.has(t); }
+function isTypeVisible(t){ return state.visibleTypes.has(t); }
 function isLabelVisible(t){ return !!state.visibleLabels[t]; }
-function moveType(type,delta){
-  const arr=ACTIVE.typeOrder; const idx=arr.indexOf(type); if(idx<0) return;
-  const tgt=clamp(idx+delta,1,arr.length-1); if(tgt===idx) return;
-  arr.splice(idx,1); arr.splice(tgt,0,type);
-  buildAll(); render();
-}
-function buildTypeToggles(){
-  const wrap=document.getElementById("typeToggles"); wrap.innerHTML="";
-  const displayOrder=[...ACTIVE.typeOrder].filter(t=>t!=="Room").reverse();
-  for(const t of displayOrder){
-    const st=ACTIVE.types[t];
-    const row=document.createElement("div"); row.className="checkbox"; row.style.justifyContent="space-between";
-    const left=document.createElement("div"); left.className="row";
-    const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=state.visibleTypes.has(t);
-    cb.addEventListener("change",()=>{cb.checked?state.visibleTypes.add(t):state.visibleTypes.delete(t); render();});
-    const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
-    const txt=document.createElement("div"); txt.innerHTML=`<div style="font-weight:700;">${escapeXml(t)}</div>`;
-    left.appendChild(cb); left.appendChild(sw); left.appendChild(txt);
-    const right=document.createElement("div"); right.className="row"; right.style.gap="6px";
-    const up=document.createElement("button"); up.type="button"; up.className="btn icon"; up.title="Move up"; up.innerHTML="&#9650;";
-    const dn=document.createElement("button"); dn.type="button"; dn.className="btn icon"; dn.title="Move down"; dn.innerHTML="&#9660;";
-    up.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveType(t, 1);});
-    dn.addEventListener("click",(ev)=>{ev.preventDefault(); ev.stopPropagation(); moveType(t,-1);});
-    right.appendChild(up); right.appendChild(dn);
-    row.appendChild(left); row.appendChild(right);
-    wrap.appendChild(row);
-  }
-}
-function buildLabelToggles(){
-  const wrap=document.getElementById("labelToggles"); wrap.innerHTML="";
-  for(const t of ACTIVE.typeOrder){
-    const st=ACTIVE.types[t];
-    const lbl=document.createElement("label"); lbl.className="checkbox";
-    const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=isLabelVisible(t);
-    cb.addEventListener("change",()=>{state.visibleLabels[t]=cb.checked; render();});
-    const sw=document.createElement("span"); sw.className="swatch"; sw.style.background=st.defaultLineColor;
-    const txt=document.createElement("div"); txt.innerHTML=`<div style="font-weight:700;">${escapeXml(t)}</div>`;
-    lbl.appendChild(cb); lbl.appendChild(sw); lbl.appendChild(txt);
-    wrap.appendChild(lbl);
-  }
-}
 function renderCounts(){
   const counts={}; for(const t of ACTIVE.typeOrder) counts[t]=0;
   for(const f of HOUSE.floors){ for(const r of f.rooms){ counts.Room=(counts.Room||0)+1; for(const it of r.items){ counts[it.type]=(counts[it.type]||0)+1; } } }
@@ -1020,6 +1008,8 @@ function buildConfigForm(){
     const st=ACTIVE.types[t];
     const id=cssId(t);
     const block=document.createElement("div"); block.className="cfgBlock";
+    block.draggable=true;
+    block.dataset.sortId=t;
 
     // ── Header ──────────────────────────────────────────────────────────────
     const head=document.createElement("div"); head.className="cfgHead";
@@ -1034,7 +1024,8 @@ function buildConfigForm(){
       sw.style.background=st.defaultLineColor;
       const lineInp=document.getElementById(`cfg_${id}_defaultLineColor`); if(lineInp) lineInp.value=st.defaultLineColor;
       const linePick=document.getElementById(`cfg_${id}_defaultLineColor_picker`); if(linePick) linePick.value=st.defaultLineColor;
-      buildTypeToggles(); buildLabelToggles(); renderCounts();
+      renderCounts();
+      render();
       markDirty();
     });
     swWrap.appendChild(sw); swWrap.appendChild(swPick);
@@ -1044,6 +1035,7 @@ function buildConfigForm(){
     headLeft.appendChild(swWrap); headLeft.appendChild(titleEl);
 
     const headRight=document.createElement("div"); headRight.className="row"; headRight.style.gap="6px";
+    const grip=document.createElement("span"); grip.className="dragGrip"; grip.textContent="⋮⋮"; grip.title="Drag to reorder item types";
     const arrow=document.createElement("span"); arrow.className="cfgArrow"; arrow.innerHTML="&#9654;";
 
     if(t!=="Room"){
@@ -1051,6 +1043,7 @@ function buildConfigForm(){
       delBtn.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); deleteType(t); });
       headRight.appendChild(delBtn);
     }
+    headRight.appendChild(grip);
     headRight.appendChild(arrow);
     head.appendChild(headLeft); head.appendChild(headRight);
 
@@ -1069,6 +1062,18 @@ function buildConfigForm(){
       nm.innerHTML=`<label>Type Name</label><input id="cfg_${id}_name" value="${escapeXml(t)}" />`;
       body.appendChild(nm);
     }
+
+    const flags=document.createElement("div"); flags.className="grid2";
+    const visibleField=document.createElement("label"); visibleField.className="checkbox";
+    const visibleCb=document.createElement("input"); visibleCb.type="checkbox"; visibleCb.checked=isTypeVisible(t);
+    const visibleText=document.createElement("div"); visibleText.textContent="Visible";
+    visibleField.appendChild(visibleCb); visibleField.appendChild(visibleText);
+    const labelField=document.createElement("label"); labelField.className="checkbox";
+    const labelCb=document.createElement("input"); labelCb.type="checkbox"; labelCb.checked=isLabelVisible(t);
+    const labelText=document.createElement("div"); labelText.textContent="Show Label";
+    labelField.appendChild(labelCb); labelField.appendChild(labelText);
+    flags.appendChild(visibleField); flags.appendChild(labelField);
+    body.appendChild(flags);
 
     const grid=document.createElement("div"); grid.className="grid2";
 
@@ -1117,7 +1122,7 @@ function buildConfigForm(){
     wrap.appendChild(block);
 
     // Live-commit changes (no explicit Save button)
-    const applyStyle=()=>{ buildTypeToggles(); buildLabelToggles(); renderCounts(); render(); markDirty(); };
+    const applyStyle=()=>{ renderCounts(); render(); markDirty(); };
     const lineTxt=document.getElementById(`cfg_${id}_defaultLineColor`);
     const cornerTxt=document.getElementById(`cfg_${id}_defaultCornerColor`);
     const fillTxt=document.getElementById(`cfg_${id}_defaultFillColor`);
@@ -1126,6 +1131,17 @@ function buildConfigForm(){
     const defWInp=document.getElementById(`cfg_${id}_defW`);
     const defHInp=document.getElementById(`cfg_${id}_defH`);
     const defZInp=document.getElementById(`cfg_${id}_defZ`);
+
+    visibleCb.addEventListener("change",()=>{
+      if(visibleCb.checked) state.visibleTypes.add(t); else state.visibleTypes.delete(t);
+      render();
+      markDirty();
+    });
+    labelCb.addEventListener("change",()=>{
+      state.visibleLabels[t]=labelCb.checked;
+      render();
+      markDirty();
+    });
 
     lineTxt?.addEventListener("change",()=>{ if(isValidCssColorToken(lineTxt.value)) st.defaultLineColor=lineTxt.value.trim(); applyStyle(); });
     cornerTxt?.addEventListener("change",()=>{ if(isValidCssColorToken(cornerTxt.value)) st.defaultCornerColor=cornerTxt.value.trim(); applyStyle(); });
@@ -1152,11 +1168,22 @@ function buildConfigForm(){
       });
     }
   }
+  setupDragSort(wrap,(dragId,targetId)=>{
+    const from=ACTIVE.typeOrder.indexOf(dragId);
+    const to=ACTIVE.typeOrder.indexOf(targetId);
+    if(from<0 || to<0 || from===to) return;
+    const [moved]=ACTIVE.typeOrder.splice(from,1);
+    ACTIVE.typeOrder.splice(to,0,moved);
+    buildAll();
+    render();
+    markDirty();
+    pushHistory();
+  });
 }
 function resetConfig(){
   const seeded=seedApp().structures[0];
   ACTIVE.types=seeded.types; ACTIVE.typeOrder=seeded.typeOrder;
-  state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
+  state.visibleTypes=new Set(ACTIVE.typeOrder);
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   buildAll(); render();
   markDirty();
@@ -1923,8 +1950,6 @@ function buildAll(){
   buildSelectedForm();
   populateNewItemSelectors();
   buildFloorToggles();
-  buildTypeToggles();
-  buildLabelToggles();
   buildConfigForm();
   refreshExportFormatSelect();
   syncViewPanelUI();
@@ -2451,7 +2476,7 @@ async function initApp(forceSeed=false){
   if(!ACTIVE.typeOrder.includes("Room")) ACTIVE.typeOrder.unshift("Room");
   for(const t of ACTIVE.typeOrder) ensureTypeExists(t);
   state.visibleFloors=new Set(HOUSE.floors.map(f=>f.id));
-  state.visibleTypes=new Set(ACTIVE.typeOrder.filter(t=>t!=="Room"));
+  state.visibleTypes=new Set(ACTIVE.typeOrder);
   state.visibleLabels=Object.fromEntries(ACTIVE.typeOrder.map(t=>[t, t==="Room"]));
   buildAll(); render();
   setStatus(state.dirty?"Storage: pending":"Storage: up to date");
