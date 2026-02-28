@@ -43,7 +43,6 @@ UI sections include:
 - `Counts`
 - `View`
 - `Configuration`
-- `Elements Visibility / Order`
 - `Export / Import`
 - `Help / About`
 
