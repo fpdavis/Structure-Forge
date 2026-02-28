@@ -608,21 +608,23 @@ function setSelectedItems(itemIds, lastItemId=null, opts={}){
   if(uniq.length>1) sel.itemIds=uniq;
   setSelected(sel);
 }
-function addItemToSelection(itemId){
+function addItemToSelection(itemId, opts={}){
   const ids=getSelectedItemIds();
   if(ids.includes(itemId)) return;
-  const addIds=expandSelectionByGroups([itemId]);
-  setSelectedItems([...ids, ...addIds], itemId);
+  const expand=opts.expandGroups!==false;
+  const addIds=expand ? expandSelectionByGroups([itemId]) : [itemId];
+  setSelectedItems([...ids, ...addIds], itemId, {expandGroups:expand});
 }
-function toggleItemInSelection(itemId){
+function toggleItemInSelection(itemId, opts={}){
   const ids=getSelectedItemIds();
+  const expand=opts.expandGroups!==false;
   if(ids.includes(itemId)){
     const next=ids.filter(id=>id!==itemId);
-    setSelectedItems(next, next[next.length-1]||null);
+    setSelectedItems(next, next[next.length-1]||null, {expandGroups:expand});
     return;
   }
   ids.push(itemId);
-  setSelectedItems(ids, itemId);
+  setSelectedItems(ids, itemId, {expandGroups:expand});
 }
 function groupSelectedItems(){
   const ids=getSelectedItemIds();
@@ -893,12 +895,18 @@ function showContextMenu(clientX, clientY){
     b.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); hideContextMenu(); fn(); });
     menu.appendChild(b);
   };
+  const hasClipboardData=!!(clipboard.kind && clipboard.data);
+  const selectedItemContexts=getSelectedItemContexts();
+  const hasMultiSelectedItems=selectedItemContexts.length>1;
+  const hasUngroupedSelectedItem=selectedItemContexts.some((res)=>!sanitizeGroupId(res.item.groupId));
+  const hasGroupedSelectedItem=selectedItemContexts.some((res)=>!!sanitizeGroupId(res.item.groupId));
   mk("Copy",()=>copySelected());
   mk("Cut",()=>cutSelected());
+  if(hasClipboardData) mk("Paste",()=>pasteClipboard());
   mk("Duplicate",()=>duplicateSelected());
   if(state.selected.kind==="item"){
-    mk("Group",()=>groupSelectedItems());
-    mk("Ungroup",()=>ungroupSelectedItems());
+    if(hasMultiSelectedItems && hasUngroupedSelectedItem) mk("Group",()=>groupSelectedItems());
+    if(hasGroupedSelectedItem) mk("Ungroup",()=>ungroupSelectedItems());
   }
   mk("Delete",()=>deleteSelected());
   mk(obj.locked?"Unlock":"Lock",()=>toggleSelectedLock());
@@ -2114,13 +2122,13 @@ function render(){
 
           const onClick=(ev)=>{ev.stopPropagation();
             if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
-            else if(ev.ctrlKey) setSelectedItems([it.id], it.id, {expandGroups:false});
+            else if(ev.ctrlKey) toggleItemInSelection(it.id, {expandGroups:false});
             else setSelectedItems([it.id], it.id);
             populateNewItemSelectors();
           };
           const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation();
             if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
-            else if(ev.ctrlKey) setSelectedItems([it.id], it.id, {expandGroups:false});
+            else if(ev.ctrlKey) toggleItemInSelection(it.id, {expandGroups:false});
             else if(!isSelectedItemId(it.id)) setSelectedItems([it.id], it.id);
             drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
