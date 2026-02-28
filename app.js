@@ -1864,7 +1864,7 @@ function render(){
       };
       rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
       rect.addEventListener("mousedown",onDown);
-      const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); ev.stopPropagation(); const alreadySelected=state.selected?.kind==="room" && state.selected.roomId===room.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
+      const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=state.selected?.kind==="room" && state.selected.roomId===room.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
       rect.addEventListener("mousedown",onRightDown); marker.addEventListener("mousedown",onRightDown);
 
       g.appendChild(rect); g.appendChild(marker);
@@ -1976,7 +1976,7 @@ function render(){
           };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
           rect.addEventListener("mousedown",onDown);
-          const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); ev.stopPropagation(); const alreadySelected=state.selected?.kind==="item" && state.selected.itemId===it.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
+          const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=state.selected?.kind==="item" && state.selected.itemId===it.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
           rect.addEventListener("mousedown",onRightDown); marker.addEventListener("mousedown",onRightDown);
 
           g.appendChild(rect); g.appendChild(marker);
