@@ -38,7 +38,7 @@ const state={
 };
 const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
-const lasso={active:false, additive:false, startX:0, startY:0, boxEl:null, baseSelection:[]};
+const lasso={active:false, additive:false, bypassGroupExpand:false, startX:0, startY:0, boxEl:null, baseSelection:[]};
 const contextMenu={el:null, target:null};
 
 // ── Nudge configuration (inches) ─────────────────────────────────────────────
@@ -383,6 +383,7 @@ function _hydrateStructure(s){
         if(!item.corner)  item.corner  = "NW";
         if(!item.roomId)  item.roomId  = room.id;
         if(!item.name)    item.name    = item.type;
+        item.groupId=sanitizeGroupId(item.groupId);
         // Restore dimension defaults from type config
         const st=td[item.type]||{};
         if(!Number.isFinite(Number(item.rotation))) item.rotation = normalizeRotation(st.defaultRotation ?? 0);
@@ -515,6 +516,44 @@ function resetStorage(){ if(!confirm("Reset stored data? This cannot be undone."
 function findFloor(floorId){ return HOUSE.floors.find(f=>f.id===floorId)||null; }
 function findRoom(roomId){ for(const f of HOUSE.floors){ const r=f.rooms.find(x=>x.id===roomId); if(r) return {floor:f, room:r}; } return null; }
 function findItem(itemId){ for(const f of HOUSE.floors){ for(const r of f.rooms){ const it=r.items.find(x=>x.id===itemId); if(it) return {floor:f, room:r, item:it}; } } return null; }
+function sanitizeGroupId(v){
+  if(v==null||v==="") return null;
+  const n=Number(v);
+  if(!Number.isInteger(n) || n<1) return null;
+  return n;
+}
+function allItems(){
+  const out=[];
+  for(const floor of HOUSE.floors||[]) for(const room of floor.rooms||[]) for(const item of room.items||[]) out.push(item);
+  return out;
+}
+function getGroupItemIds(groupId){
+  const gid=sanitizeGroupId(groupId);
+  if(!gid) return [];
+  const ids=[];
+  for(const item of allItems()) if(sanitizeGroupId(item.groupId)===gid) ids.push(item.id);
+  return ids;
+}
+function expandSelectionByGroups(itemIds){
+  const out=new Set((itemIds||[]).filter(Boolean));
+  for(const id of [...out]){
+    const res=findItem(id);
+    const gid=sanitizeGroupId(res?.item?.groupId);
+    if(!gid) continue;
+    for(const groupedId of getGroupItemIds(gid)) out.add(groupedId);
+  }
+  return [...out];
+}
+function nextUnusedGroupId(){
+  const used=new Set();
+  for(const item of allItems()){
+    const gid=sanitizeGroupId(item.groupId);
+    if(gid) used.add(gid);
+  }
+  let next=1;
+  while(used.has(next)) next++;
+  return next;
+}
 function findRoomOnFloorAtAbsPoint(floorId, xIn, yIn, excludeRoomId=null){
   const floor=findFloor(floorId);
   if(!floor) return null;
@@ -556,8 +595,11 @@ function getSelectedItemIds(){
 }
 function isMultiItemSelection(){ return getSelectedItemIds().length>1; }
 function isSelectedItemId(itemId){ return getSelectedItemIds().includes(itemId); }
-function setSelectedItems(itemIds, lastItemId=null){
-  const uniq=[...new Set((itemIds||[]).filter(Boolean))].filter(id=>findItem(id));
+function setSelectedItems(itemIds, lastItemId=null, opts={}){
+  const expand=opts.expandGroups!==false;
+  const sourceIds=(itemIds||[]).filter(Boolean);
+  const expanded=expand ? expandSelectionByGroups(sourceIds) : sourceIds;
+  const uniq=[...new Set(expanded)].filter(id=>findItem(id));
   if(!uniq.length){ setSelected(null); return; }
   const last=(lastItemId && uniq.includes(lastItemId)) ? lastItemId : uniq[uniq.length-1];
   const res=findItem(last);
@@ -569,8 +611,8 @@ function setSelectedItems(itemIds, lastItemId=null){
 function addItemToSelection(itemId){
   const ids=getSelectedItemIds();
   if(ids.includes(itemId)) return;
-  ids.push(itemId);
-  setSelectedItems(ids, itemId);
+  const addIds=expandSelectionByGroups([itemId]);
+  setSelectedItems([...ids, ...addIds], itemId);
 }
 function toggleItemInSelection(itemId){
   const ids=getSelectedItemIds();
@@ -581,6 +623,33 @@ function toggleItemInSelection(itemId){
   }
   ids.push(itemId);
   setSelectedItems(ids, itemId);
+}
+function groupSelectedItems(){
+  const ids=getSelectedItemIds();
+  if(ids.length<2) return;
+  const gid=nextUnusedGroupId();
+  for(const id of ids){
+    const res=findItem(id);
+    if(res) res.item.groupId=gid;
+  }
+  setSelectedItems(ids, ids[ids.length-1]||null);
+  buildSelectedForm();
+  render();
+  markDirty();
+  pushHistory();
+}
+function ungroupSelectedItems(){
+  const ids=getSelectedItemIds();
+  if(!ids.length) return;
+  for(const id of ids){
+    const res=findItem(id);
+    if(res) res.item.groupId=null;
+  }
+  setSelectedItems(ids, ids[ids.length-1]||null, {expandGroups:false});
+  buildSelectedForm();
+  render();
+  markDirty();
+  pushHistory();
 }
 
 const ROOM_FIELDS=[
@@ -824,7 +893,13 @@ function showContextMenu(clientX, clientY){
     b.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); hideContextMenu(); fn(); });
     menu.appendChild(b);
   };
+  mk("Copy",()=>copySelected());
+  mk("Cut",()=>cutSelected());
   mk("Duplicate",()=>duplicateSelected());
+  if(state.selected.kind==="item"){
+    mk("Group",()=>groupSelectedItems());
+    mk("Ungroup",()=>ungroupSelectedItems());
+  }
   mk("Delete",()=>deleteSelected());
   mk(obj.locked?"Unlock":"Lock",()=>toggleSelectedLock());
   menu.style.left=`${Math.max(8,clientX)}px`;
@@ -2038,12 +2113,14 @@ function render(){
           if(it.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
           const onClick=(ev)=>{ev.stopPropagation();
-            if(ev.shiftKey||ev.ctrlKey||ev.metaKey) toggleItemInSelection(it.id);
+            if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
+            else if(ev.ctrlKey) setSelectedItems([it.id], it.id, {expandGroups:false});
             else setSelectedItems([it.id], it.id);
             populateNewItemSelectors();
           };
           const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation();
-            if(ev.shiftKey||ev.ctrlKey||ev.metaKey) toggleItemInSelection(it.id);
+            if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
+            else if(ev.ctrlKey) setSelectedItems([it.id], it.id, {expandGroups:false});
             else if(!isSelectedItemId(it.id)) setSelectedItems([it.id], it.id);
             drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
@@ -2327,6 +2404,14 @@ function wire(){
     const tag=(ev.target?.tagName||"").toLowerCase();
     const editable=tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable;
     if(editable) return;
+
+    // ── Group / Ungroup ───────────────────────────────────────────────────
+    if(ev.altKey && (ev.key==="g"||ev.key==="G")){
+      ev.preventDefault();
+      if(ev.shiftKey) ungroupSelectedItems();
+      else groupSelectedItems();
+      return;
+    }
 
     // ── Open / Save / Print ─────────────────────────────────────────
     if(ev.ctrlKey||ev.metaKey){
@@ -2756,7 +2841,7 @@ function updateLassoBox(clientX, clientY){
     const hit=!(b.right<r.left || b.left>r.right || b.bottom<r.top || b.top>r.bottom);
     if(hit) ids.add(el.dataset.itemId);
   });
-  setSelectedItems([...ids]);
+  setSelectedItems([...ids], null, {expandGroups:!lasso.bypassGroupExpand});
 }
 function endLasso(){
   if(!lasso.active) return;
@@ -2800,6 +2885,7 @@ function initPanZoom(){
     ev.preventDefault();
     lasso.active=true;
     lasso.additive=!!(ev.shiftKey||ev.ctrlKey||ev.metaKey);
+    lasso.bypassGroupExpand=!!ev.ctrlKey;
     lasso.startX=ev.clientX;
     lasso.startY=ev.clientY;
     lasso.baseSelection=lasso.additive?getSelectedItemIds():[];
