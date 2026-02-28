@@ -38,6 +38,7 @@ const state={
 };
 const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
+const contextMenu={el:null, target:null};
 
 // ── Nudge configuration (inches) ─────────────────────────────────────────────
 const NUDGE_NORMAL_IN = 1;   // Arrow key nudge – normal step
@@ -275,7 +276,13 @@ function isValidCssColorToken(v){
   return false;
 }
 function genDefaultStyle(idx){ const hue=(idx*0.17)%1; const line=rgbToHex(hsvToRgb(hue,0.55,0.95));
-  return {strokeWidth:3, defaultLineColor:line, defaultCornerColor:line, defaultFillColor:"#ffffff", defaultFillAlpha:0.05, defaultWIn:48, defaultHIn:48, defaultHeightIn:96}; };
+  return {strokeWidth:3, defaultLineColor:line, defaultCornerColor:line, defaultFillColor:"#ffffff", defaultFillAlpha:0.05, defaultWIn:48, defaultHIn:48, defaultHeightIn:96, defaultRotation:0}; };
+
+function normalizeRotation(v){
+  const n=Number(v);
+  if(!Number.isFinite(n)) return 0;
+  return clamp(n,0,360);
+}
 
 function normalizeRectAbs(obj){ const {xIn,yIn,wIn,hIn,corner}=obj; let x=xIn,y=yIn;
   if(corner==="NE") x=xIn-wIn; else if(corner==="SW") y=yIn-hIn; else if(corner==="SE"){x=xIn-wIn;y=yIn-hIn;}
@@ -368,12 +375,18 @@ function _hydrateStructure(s){
       if(!room.corner)  room.corner  = "NW";
       if(!room.type)    room.type    = "Room";
       if(!room.floorId) room.floorId = floor.id;
+      if(!Number.isFinite(Number(room.rotation))) room.rotation = normalizeRotation(td.Room?.defaultRotation ?? 0);
+      else room.rotation = normalizeRotation(room.rotation);
+      room.locked = !!room.locked;
       for(const item of (room.items||[])){
         if(!item.corner)  item.corner  = "NW";
         if(!item.roomId)  item.roomId  = room.id;
         if(!item.name)    item.name    = item.type;
         // Restore dimension defaults from type config
         const st=td[item.type]||{};
+        if(!Number.isFinite(Number(item.rotation))) item.rotation = normalizeRotation(st.defaultRotation ?? 0);
+        else item.rotation = normalizeRotation(item.rotation);
+        item.locked = !!item.locked;
         if(item.wIn      == null && st.defaultWIn      != null) item.wIn      = st.defaultWIn;
         if(item.hIn      == null && st.defaultHIn      != null) item.hIn      = st.defaultHIn;
         if(item.heightIn == null && st.defaultHeightIn != null) item.heightIn = st.defaultHeightIn;
@@ -410,9 +423,15 @@ function applyDefaultsToObj(o){
   if(o.fillColor==null) o.fillColor=st.defaultFillColor;
   if(o.fillAlpha==null) o.fillAlpha=st.defaultFillAlpha;
   if(!Number.isFinite(o.strokeWidth)) o.strokeWidth=st.strokeWidth;
+  if(!Number.isFinite(Number(o.rotation))) o.rotation=normalizeRotation(st.defaultRotation ?? 0);
+  else o.rotation=normalizeRotation(o.rotation);
+  o.locked=!!o.locked;
 }
 function ensureTypeExists(type){
-  if(ACTIVE.types[type]) return;
+  if(ACTIVE.types[type]){
+    if(!Number.isFinite(Number(ACTIVE.types[type].defaultRotation))) ACTIVE.types[type].defaultRotation=0;
+    return;
+  }
   const idx=Object.keys(ACTIVE.types).length;
   ACTIVE.types[type]=genDefaultStyle(idx);
   if(!ACTIVE.typeOrder.includes(type)) ACTIVE.typeOrder.push(type);
@@ -423,12 +442,12 @@ function ensureTypeExists(type){
 function seedApp(){
   const id=guid();
   const types={
-    "Room":{strokeWidth:6,defaultLineColor:"#cfd6e6",defaultCornerColor:"#55d6be",defaultFillColor:"#ffffff",defaultFillAlpha:0.03,defaultWIn:180,defaultHIn:140,defaultHeightIn:96},
-    "Door":{strokeWidth:5,defaultLineColor:"#ffcd6a",defaultCornerColor:"#ffcd6a",defaultFillColor:"#ffcd6a",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
-    "Window":{strokeWidth:4,defaultLineColor:"#6aa6ff",defaultCornerColor:"#6aa6ff",defaultFillColor:"#6aa6ff",defaultFillAlpha:0.05,defaultWIn:48,defaultHIn:6,defaultHeightIn:48},
-    "Opening":{strokeWidth:4,defaultLineColor:"#c46aff",defaultCornerColor:"#c46aff",defaultFillColor:"#c46aff",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
-    "Outlet":{strokeWidth:3,defaultLineColor:"#6aff9f",defaultCornerColor:"#6aff9f",defaultFillColor:"#6aff9f",defaultFillAlpha:0.05,defaultWIn:6,defaultHIn:6,defaultHeightIn:18},
-    "Light":{strokeWidth:3,defaultLineColor:"#ffffff",defaultCornerColor:"#ffffff",defaultFillColor:"#ffffff",defaultFillAlpha:0.06,defaultWIn:8,defaultHIn:8,defaultHeightIn:96}
+    "Room":{strokeWidth:6,defaultLineColor:"#cfd6e6",defaultCornerColor:"#55d6be",defaultFillColor:"#ffffff",defaultFillAlpha:0.03,defaultWIn:180,defaultHIn:140,defaultHeightIn:96,defaultRotation:0},
+    "Door":{defaultRotation:0,strokeWidth:5,defaultLineColor:"#ffcd6a",defaultCornerColor:"#ffcd6a",defaultFillColor:"#ffcd6a",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
+    "Window":{defaultRotation:0,strokeWidth:4,defaultLineColor:"#6aa6ff",defaultCornerColor:"#6aa6ff",defaultFillColor:"#6aa6ff",defaultFillAlpha:0.05,defaultWIn:48,defaultHIn:6,defaultHeightIn:48},
+    "Opening":{defaultRotation:0,strokeWidth:4,defaultLineColor:"#c46aff",defaultCornerColor:"#c46aff",defaultFillColor:"#c46aff",defaultFillAlpha:0.05,defaultWIn:36,defaultHIn:6,defaultHeightIn:80},
+    "Outlet":{defaultRotation:0,strokeWidth:3,defaultLineColor:"#6aff9f",defaultCornerColor:"#6aff9f",defaultFillColor:"#6aff9f",defaultFillAlpha:0.05,defaultWIn:6,defaultHIn:6,defaultHeightIn:18},
+    "Light":{defaultRotation:0,strokeWidth:3,defaultLineColor:"#ffffff",defaultCornerColor:"#ffffff",defaultFillColor:"#ffffff",defaultFillAlpha:0.06,defaultWIn:8,defaultHIn:8,defaultHeightIn:96}
   };
   const typeOrder=["Room","Door","Window","Opening","Outlet","Light"];
   const house={floors:[
@@ -536,6 +555,8 @@ const ROOM_FIELDS=[
   {key:"wIn",label:"Width",unit:true,kind:"number"},
   {key:"hIn",label:"Length",unit:true,kind:"number"},
   {key:"heightIn",label:"Height",unit:true,kind:"number"},
+  {key:"rotation",label:"Rotation",kind:"range",min:"0",max:"360",step:"1"},
+  {key:"locked",label:"Lock",kind:"checkbox"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
@@ -551,6 +572,8 @@ const ITEM_FIELDS=[
   {key:"wIn",label:"Width",unit:true,kind:"number"},
   {key:"hIn",label:"Length",unit:true,kind:"number"},
   {key:"heightIn",label:"Height",unit:true,kind:"number"},
+  {key:"rotation",label:"Rotation",kind:"range",min:"0",max:"360",step:"1"},
+  {key:"locked",label:"Lock",kind:"checkbox"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
   {key:"fillColor",label:"Fill Color",kind:"color"},
@@ -636,6 +659,7 @@ function buildSelectedForm(){
     }
     let input;
     if(f.kind==="textarea"){ input=document.createElement("textarea"); }
+    else if(f.kind==="checkbox"){ input=document.createElement("input"); input.type="checkbox"; }
     else if(f.kind==="select"){
       input=document.createElement("select"); for(const opt of f.options){ const o=document.createElement("option"); o.value=opt; o.textContent=opt; input.appendChild(o); }
     } else if(f.kind==="selectDynamic"){
@@ -658,19 +682,22 @@ function buildSelectedForm(){
     }
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
+    if(f.kind==="checkbox") v=!!obj?.[f.key];
     // For select fields, fall back to first option rather than leaving blank
     if((f.kind==="select"||f.kind==="selectDynamic") && v==="" && input.options.length) v=input.options[0].value;
     if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha"].includes(f.key) && v!=="" && Number.isFinite(+v)){
       const step=(f.step?parseFloat(f.step):0.5);
       v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
     }
-    input.value=v;
+    if(f.kind==="checkbox") input.checked=!!v; else input.value=v;
 
     const commitValue=(isLive)=>{
-      const raw=input.value;
+      const raw=f.kind==="checkbox" ? input.checked : input.value;
       if(f.kind==="number" || f.kind==="range"){
         const num=parseFloat(raw);
         if(Number.isFinite(num)) obj[f.key]=num;
+      } else if(f.kind==="checkbox"){
+        obj[f.key]=!!raw;
       } else {
         obj[f.key]=raw;
       }
@@ -684,6 +711,8 @@ function buildSelectedForm(){
 
     if(f.kind==="range"){
       input.addEventListener("input",()=>commitValue(true));
+      input.addEventListener("change",()=>commitValue(false));
+    } else if(f.kind==="checkbox"){
       input.addEventListener("change",()=>commitValue(false));
     } else {
       input.addEventListener("change",()=>commitValue(false));
@@ -705,7 +734,56 @@ function buildSelectedForm(){
   state.selectedSnapshot=null;
 }
 
-function setSelected(sel){ state.selected=sel; buildSelectedForm(); render(); }
+function setSelected(sel){ hideContextMenu(); state.selected=sel; buildSelectedForm(); render(); }
+
+function getSelectedObject(){
+  if(!state.selected) return null;
+  if(state.selected.kind==="room"){
+    const res=findRoom(state.selected.roomId);
+    return res?res.room:null;
+  }
+  const res=findItem(state.selected.itemId);
+  return res?res.item:null;
+}
+
+function toggleSelectedLock(){
+  const obj=getSelectedObject();
+  if(!obj) return;
+  obj.locked=!obj.locked;
+  buildSelectedForm();
+  render();
+  markDirty();
+  pushHistory();
+}
+
+function hideContextMenu(){
+  if(contextMenu.el){ contextMenu.el.remove(); contextMenu.el=null; contextMenu.target=null; }
+}
+
+function showContextMenu(clientX, clientY){
+  hideContextMenu();
+  if(!state.selected) return;
+  const obj=getSelectedObject();
+  if(!obj) return;
+  const menu=document.createElement("div");
+  menu.className="sf-contextMenu";
+  const mk=(label,fn)=>{
+    const b=document.createElement("button");
+    b.type="button";
+    b.className="sf-contextMenuItem";
+    b.textContent=label;
+    b.addEventListener("click",(ev)=>{ ev.preventDefault(); ev.stopPropagation(); hideContextMenu(); fn(); });
+    menu.appendChild(b);
+  };
+  mk("Duplicate",()=>duplicateSelected());
+  mk("Delete",()=>deleteSelected());
+  mk(obj.locked?"Unlock":"Lock",()=>toggleSelectedLock());
+  menu.style.left=`${Math.max(8,clientX)}px`;
+  menu.style.top=`${Math.max(8,clientY)}px`;
+  document.body.appendChild(menu);
+  contextMenu.el=menu;
+  contextMenu.target=state.selected?JSON.parse(JSON.stringify(state.selected)):null;
+}
 
 // Selected edits live-commit; no explicit Save/Reset/Clear controls.
 
@@ -1120,6 +1198,10 @@ function buildConfigForm(){
     defZ.innerHTML=`<label>Default Height (${escapeXml(inputUnitLabel())})</label><input id="cfg_${id}_defZ" type="number" step="0.5" value="${escapeXml(st.defaultHeightIn ?? 0)}" />`;
     grid.appendChild(defZ);
 
+    const defRot=document.createElement("div"); defRot.className="field";
+    defRot.innerHTML=`<label>Default Rotation (0-360)</label><input id="cfg_${id}_defRot" type="range" min="0" max="360" step="1" value="${escapeXml(normalizeRotation(st.defaultRotation ?? 0))}" class="sf-rangeFull" />`;
+    grid.appendChild(defRot);
+
     body.appendChild(grid);
     block.appendChild(head);
     block.appendChild(body);
@@ -1135,6 +1217,7 @@ function buildConfigForm(){
     const defWInp=document.getElementById(`cfg_${id}_defW`);
     const defHInp=document.getElementById(`cfg_${id}_defH`);
     const defZInp=document.getElementById(`cfg_${id}_defZ`);
+    const defRotInp=document.getElementById(`cfg_${id}_defRot`);
 
     visibleCb.addEventListener("change",()=>{
       if(visibleCb.checked) state.visibleTypes.add(t); else state.visibleTypes.delete(t);
@@ -1155,6 +1238,7 @@ function buildConfigForm(){
     defWInp?.addEventListener("change",()=>{ const v=parseFloat(defWInp.value); if(Number.isFinite(v)) st.defaultWIn=v; markDirty(); });
     defHInp?.addEventListener("change",()=>{ const v=parseFloat(defHInp.value); if(Number.isFinite(v)) st.defaultHIn=v; markDirty(); });
     defZInp?.addEventListener("change",()=>{ const v=parseFloat(defZInp.value); if(Number.isFinite(v)) st.defaultHeightIn=v; markDirty(); });
+    defRotInp?.addEventListener("input",()=>{ st.defaultRotation=normalizeRotation(defRotInp.value); render(); markDirty(); });
 
     if(t!=="Room"){
       const nameInp=document.getElementById(`cfg_${id}_name`);
@@ -1250,6 +1334,7 @@ function saveConfig(){
     const defW=parseFloat(document.getElementById(`cfg_${id}_defW`)?.value);
     const defH=parseFloat(document.getElementById(`cfg_${id}_defH`)?.value);
     const defZ=parseFloat(document.getElementById(`cfg_${id}_defZ`)?.value);
+    const defRot=parseFloat(document.getElementById(`cfg_${id}_defRot`)?.value);
 
     if(typeof line==="string" && isValidCssColorToken(line)) st.defaultLineColor=line.trim();
     if(typeof corner==="string" && isValidCssColorToken(corner)) st.defaultCornerColor=corner.trim();
@@ -1259,6 +1344,7 @@ function saveConfig(){
     if(Number.isFinite(defW)) st.defaultWIn=defW;
     if(Number.isFinite(defH)) st.defaultHIn=defH;
     if(Number.isFinite(defZ)) st.defaultHeightIn=defZ;
+    if(Number.isFinite(defRot)) st.defaultRotation=normalizeRotation(defRot);
   }
 
   buildAll(); render();
@@ -1344,7 +1430,7 @@ function addNew(){
   if(type==="Room"){
     const floor=findFloor(floorId); if(!floor) return;
     const st=ACTIVE.types["Room"]||genDefaultStyle(0);
-    const r={id:guid(),type:"Room",floorId:floor.id,name:"Room",description:"",corner:"NW",xIn:20,yIn:20,wIn:st.defaultWIn??144,hIn:st.defaultHIn??120,heightIn:st.defaultHeightIn??96,items:[]};
+    const r={id:guid(),type:"Room",floorId:floor.id,name:"Room",description:"",corner:"NW",xIn:20,yIn:20,wIn:st.defaultWIn??144,hIn:st.defaultHIn??120,heightIn:st.defaultHeightIn??96,rotation:normalizeRotation(st.defaultRotation??0),locked:false,items:[]};
     applyDefaultsToObj(r);
     floor.rooms.push(r);
     state.visibleFloors.add(floor.id);
@@ -1361,7 +1447,7 @@ function addNew(){
   if(!targetRoomId){ alert("Select a room first (or choose a room)."); return; }
   const res=findRoom(targetRoomId); if(!res){ alert("Room not found."); return; }
   const st=ACTIVE.types[type]||genDefaultStyle(Object.keys(ACTIVE.types).length);
-  const it={id:guid(),type,roomId:res.room.id,name:type,description:"",corner:"NW",xIn:12,yIn:12,wIn:st.defaultWIn??24,hIn:st.defaultHIn??24,heightIn:st.defaultHeightIn??48};
+  const it={id:guid(),type,roomId:res.room.id,name:type,description:"",corner:"NW",xIn:12,yIn:12,wIn:st.defaultWIn??24,hIn:st.defaultHIn??24,heightIn:st.defaultHeightIn??48,rotation:normalizeRotation(st.defaultRotation??0),locked:false};
   applyDefaultsToObj(it);
   res.room.items.push(it);
   setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:it.id});
@@ -1740,6 +1826,8 @@ function render(){
       const g=document.createElementNS("http://www.w3.org/2000/svg","g");
       const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
       rect.setAttribute("x",x); rect.setAttribute("y",y); rect.setAttribute("width",w); rect.setAttribute("height",h);
+      const roomRotation=normalizeRotation(room.rotation);
+      if(roomRotation!==0) rect.setAttribute("transform",`rotate(${roomRotation} ${x+w/2} ${y+h/2})`);
       rect.setAttribute("fill",room.fillColor||st.defaultFillColor);
       rect.setAttribute("fill-opacity", String(room.fillAlpha ?? st.defaultFillAlpha ?? 1));
       rect.setAttribute("stroke",room.lineColor||st.defaultLineColor);
@@ -1757,13 +1845,14 @@ function render(){
       marker.setAttribute("fill",room.cornerColor||st.defaultCornerColor);
       marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
       marker.classList.add("selectable");
+      if(room.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
       const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"room", floorId:floor.id, roomId:room.id}); populateNewItemSelectors();};
-      const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+      const onDown=(ev)=>{if(ev.button!==0) return; if(room.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
         drag.active=true; drag.kind="room"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
         drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.startNW={xIn:rr.xIn,yIn:rr.yIn};
         drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
-      const beginRoomResize=(handleCorner,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+      const beginRoomResize=(handleCorner,ev)=>{if(ev.button!==0) return; if(room.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
         drag.active=true; drag.kind="room-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
         drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
         const rnw=normalizeRectAbs(room);
@@ -1775,10 +1864,12 @@ function render(){
       };
       rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
       rect.addEventListener("mousedown",onDown);
+      const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=state.selected?.kind==="room" && state.selected.roomId===room.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
+      rect.addEventListener("mousedown",onRightDown); marker.addEventListener("mousedown",onRightDown);
 
       g.appendChild(rect); g.appendChild(marker);
       if(roomSelected){
-        const beginRoomEdgeResize=(edge,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+        const beginRoomEdgeResize=(edge,ev)=>{if(ev.button!==0) return; if(room.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
           drag.active=true; drag.kind="room-edge-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=null;
           drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
           drag.startRect={xIn:rr.xIn,yIn:rr.yIn,wIn:room.wIn,hIn:room.hIn,edge};
@@ -1846,6 +1937,8 @@ function render(){
           const g=document.createElementNS("http://www.w3.org/2000/svg","g");
           const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
           rect.setAttribute("x",x); rect.setAttribute("y",y); rect.setAttribute("width",w); rect.setAttribute("height",h);
+          const itemRotation=normalizeRotation(it.rotation);
+          if(itemRotation!==0) rect.setAttribute("transform",`rotate(${itemRotation} ${x+w/2} ${y+h/2})`);
           rect.setAttribute("fill",it.fillColor||st.defaultFillColor);
           rect.setAttribute("fill-opacity", String(it.fillAlpha ?? st.defaultFillAlpha ?? 1));
           rect.setAttribute("stroke",it.lineColor||st.defaultLineColor);
@@ -1863,15 +1956,16 @@ function render(){
           marker.setAttribute("fill",it.cornerColor||st.defaultCornerColor);
           marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
           marker.classList.add("selectable");
+          if(it.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
           const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"item", floorId:floor.id, roomId:room.id, itemId:it.id}); populateNewItemSelectors();};
-          const onDown=(ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
             drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
             const rel=normalizeRectRelToRoomPrimary(it, room);
             drag.startNW={xIn:rel.xIn,yIn:rel.yIn};
             drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
-          const beginItemResize=(handleCorner,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          const beginItemResize=(handleCorner,ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
             drag.active=true; drag.kind="item-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
             const moving=markerAbsPos(abs, it, handleCorner);
@@ -1882,10 +1976,12 @@ function render(){
           };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
           rect.addEventListener("mousedown",onDown);
+          const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=state.selected?.kind==="item" && state.selected.itemId===it.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
+          rect.addEventListener("mousedown",onRightDown); marker.addEventListener("mousedown",onRightDown);
 
           g.appendChild(rect); g.appendChild(marker);
           if(itemSelected){
-            const beginItemEdgeResize=(edge,ev)=>{if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+            const beginItemEdgeResize=(edge,ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
               drag.active=true; drag.kind="item-edge-resize"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
               drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
               drag.startRect={xIn:abs.xIn,yIn:abs.yIn,wIn:it.wIn,hIn:it.hIn,edge};
@@ -2115,6 +2211,7 @@ function wire(){
 
   // Keyboard shortcuts
   document.addEventListener("keydown",(ev)=>{
+    hideContextMenu();
     // ── Esc: abort an in-progress drag and revert ──────────────────────────
     if(ev.key==="Escape"){
       if(drag.active && drag.preState){
@@ -2285,6 +2382,7 @@ function wire(){
   initPanZoom();
 
   window.addEventListener("mousemove",(ev)=>{
+    if(contextMenu.el && drag.active) hideContextMenu();
     if(!drag.active) return;
     drag.moved=true;
     // Always query the live SVG — render() destroys and recreates the DOM each
@@ -2367,14 +2465,14 @@ function wire(){
       setItemFromNW_Rel(res.item, res.room, x-roomNW.xIn, y-roomNW.yIn);
       buildSelectedForm();
     } else if(drag.kind==="room"){
-      const res=findRoom(drag.roomId); if(!res) return;
+      const res=findRoom(drag.roomId); if(!res || res.room.locked) return;
       const rr=normalizeRectAbs(res.room);
       const nwX=drag.startNW.xIn+dxIn;
       const nwY=drag.startNW.yIn+dyIn;
       setRoomFromNW(res.room,nwX,nwY);
       updateSelectedXYInputs(res.room);
     } else {
-      const res=findItem(drag.itemId); if(!res) return;
+      const res=findItem(drag.itemId); if(!res || res.item.locked) return;
       const nwX=drag.startNW.xIn+dxIn;
       const nwY=drag.startNW.yIn+dyIn;
       setItemFromNW_Rel(res.item,res.room,nwX,nwY);
@@ -2385,7 +2483,11 @@ function wire(){
       requestAnimationFrame(()=>{drag.raf=false; render();});
     }
   });
-  window.addEventListener("mouseup",()=>{
+  window.addEventListener("mouseup",(ev)=>{
+    if(drag.kind==="context-candidate" && ev.button===2){
+      const moved=Math.abs((ev.clientX||0)-drag.startClientX)>3 || Math.abs((ev.clientY||0)-drag.startClientY)>3;
+      if(!moved) showContextMenu(ev.clientX||0, ev.clientY||0);
+    }
     if(drag.active && drag.moved && drag.kind==="item"){
       const res=findItem(drag.itemId);
       if(res){
@@ -2419,6 +2521,7 @@ function migrateColorsAndDefaults(app){
         if(st.defaultWIn==null) st.defaultWIn=48;
         if(st.defaultHIn==null) st.defaultHIn=48;
         if(st.defaultHeightIn==null) st.defaultHeightIn=96;
+        if(!Number.isFinite(Number(st.defaultRotation))) st.defaultRotation=0;
       }
       for(const f of s.house?.floors||[]){
         for(const r of f.rooms||[]){
@@ -2427,12 +2530,17 @@ function migrateColorsAndDefaults(app){
             if(m){ r.fillAlpha=clamp(parseFloat(m[4]),0,1); r.fillColor=rgbToHex({r:+m[1],g:+m[2],b:+m[3]}).toLowerCase(); }
           }
           if(r.fillAlpha==null) r.fillAlpha=1;
+          if(!Number.isFinite(Number(r.rotation))) r.rotation=normalizeRotation((s.types?.Room||{}).defaultRotation ?? 0); else r.rotation=normalizeRotation(r.rotation);
+          r.locked=!!r.locked;
           for(const it of r.items||[]){
             if(typeof it.fillColor==="string"){
               const m=it.fillColor.match(/^rgba\((\d+),(\d+),(\d+),([0-9.]+)\)$/i);
               if(m){ it.fillAlpha=clamp(parseFloat(m[4]),0,1); it.fillColor=rgbToHex({r:+m[1],g:+m[2],b:+m[3]}).toLowerCase(); }
             }
             if(it.fillAlpha==null) it.fillAlpha=1;
+            const td=s.types?.[it.type]||{};
+            if(!Number.isFinite(Number(it.rotation))) it.rotation=normalizeRotation(td.defaultRotation ?? 0); else it.rotation=normalizeRotation(it.rotation);
+            it.locked=!!it.locked;
           }
         }
       }
@@ -2520,8 +2628,9 @@ function initPanZoom(){
     render();
   }, {passive:false});
 
-  wrap.addEventListener("contextmenu",(ev)=>{ if(pan.active||ev.button===2) ev.preventDefault(); });
+  wrap.addEventListener("contextmenu",(ev)=>{ ev.preventDefault(); });
   wrap.addEventListener("mousedown",(ev)=>{
+    if(ev.button!==2) hideContextMenu();
     // Pan with right-drag anywhere on the canvas (objects or background)
     if(ev.button===2){
       ev.preventDefault();
@@ -2529,10 +2638,14 @@ function initPanZoom(){
     }
   });
   window.addEventListener("mousemove",(ev)=>{
+    if(contextMenu.el && drag.active) hideContextMenu();
     if(!pan.active) return;
     state.view.tx=pan.startTx+(ev.clientX-pan.startX);
     state.view.ty=pan.startTy+(ev.clientY-pan.startY);
     render();
   });
   window.addEventListener("mouseup",()=>{pan.active=false;});
+  document.addEventListener("mousedown",(ev)=>{
+    if(contextMenu.el && !contextMenu.el.contains(ev.target)) hideContextMenu();
+  });
 }

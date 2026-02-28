@@ -16,6 +16,8 @@
     delete r.type;
     delete r.floorId;
     if (r.corner    === "NW") delete r.corner;
+    if ((Number(r.rotation) || 0) === 0) delete r.rotation;
+    if (!r.locked) delete r.locked;
     if (r.description === "") delete r.description;
     if (r.items) r.items = r.items.map(it => stripItem(it, typeDefaults));
     return r;
@@ -38,6 +40,8 @@
 
     delete it.roomId;
     if (it.corner      === "NW") delete it.corner;
+    if ((Number(it.rotation) || 0) === Number(td.defaultRotation || 0)) delete it.rotation;
+    if (!it.locked) delete it.locked;
     if (it.description === "")   delete it.description;
     if (it.name        === it.type) delete it.name;
 
@@ -69,7 +73,11 @@
       for (const t of rawTypes) { if (t && t.name) { const {name,...rest}=t; obj[name]=rest; } }
       return obj;
     }
-    return rawTypes;
+    const out = Object.assign({}, rawTypes);
+    for (const [name, st] of Object.entries(out)) {
+      if (!Number.isFinite(Number(st.defaultRotation))) st.defaultRotation = 0;
+    }
+    return out;
   }
 
   function stripStructure(struct, typeDefaults) {
