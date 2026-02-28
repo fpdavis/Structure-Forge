@@ -111,9 +111,13 @@ Notes
         <div class="helpDivider sf-mt10"></div>
 
         <div class="grid2">
-          <div class="checkbox sf-h44 sf-alignCenter sf-justifyStart">
-            <input id="gridEnabled" type="checkbox" />
-            <div>Show Grid</div>
+          <div class="field">
+            <label>Show Grid</label>
+            <select id="gridMode">
+              <option value="off">Off</option>
+              <option value="under">On (below items)</option>
+              <option value="over">On (above items)</option>
+            </select>
           </div>
 		  <div class="checkbox sf-h44 sf-alignCenter sf-justifyStart">
             <input id="gridShowMinor" type="checkbox" checked />
@@ -145,11 +149,17 @@ Notes
         <div class="grid2 sf-mt10">
           <div class="field">
             <label>Minor color</label>
-            <input id="gridMinorColor" type="color" value="#ffffff" />
+            <div class="colorRow">
+              <input id="gridMinorColor" type="text" placeholder="#rrggbb or css name" />
+              <input id="gridMinorColorPicker" type="color" value="#ffffff" />
+            </div>
           </div>
           <div class="field">
             <label>Major color</label>
-            <input id="gridMajorColor" type="color" value="#ffffff" />
+            <div class="colorRow">
+              <input id="gridMajorColor" type="text" placeholder="#rrggbb or css name" />
+              <input id="gridMajorColorPicker" type="color" value="#ffffff" />
+            </div>
           </div>
         </div>
 
