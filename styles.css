@@ -46,7 +46,10 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 .roomLabel{font-size:12px;fill:var(--text);paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:3px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
 .itemLabel{font-size:11px;fill:var(--text);paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:3px;text-anchor:start;dominant-baseline:hanging;pointer-events:none}
 .gridLayer{pointer-events:none}
-.floorRow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.floorRow{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.floorRow[draggable="true"],.cfgBlock[draggable="true"]{cursor:grab}
+.floorRow.isDragging,.cfgBlock.isDragging{opacity:.45}
+.dragGrip{font-size:14px;color:var(--muted);letter-spacing:-1px;cursor:grab;user-select:none}
 .topbar{display:grid;grid-template-columns:1fr;gap:8px;margin:0 0 10px}
 .topbar .line{display:flex;gap:8px;align-items:center}
 .topbar .line2{display:grid;grid-template-columns:1fr;gap:8px;align-items:center}
