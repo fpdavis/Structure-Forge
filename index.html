@@ -63,7 +63,7 @@ Notes
       </div>
     </div>
 
-    <details class="panel" open>
+    <details class="panel">
       <summary><span class="sumTitle">Selected</span><span class="sumRight"><span id="selHeader">(none)</span><span class="chev"></span></span></summary>
       <div class="panelBody">
         <div class="grid2" id="selForm"></div>
@@ -74,7 +74,7 @@ Notes
       </div>
     </details>
 
-    <details class="panel" open>
+    <details class="panel">
       <summary><span class="sumTitle">Add new item</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
       <div class="panelBody">
@@ -91,8 +91,46 @@ Notes
 </div>
     </details>
 
-    <details class="panel" open>
-      <summary><span class="sumTitle">View</span><span class="sumRight"><span><strong id="ppiValue">3</strong> px/in</span><span class="chev"></span></span></summary>
+    <details class="panel">
+      <summary><span class="sumTitle">Floors</span><span class="sumRight"><span id="floorSummary"></span><span class="chev"></span></span></summary>
+      <div class="panelBody">
+        <div class="btnRow sf-mb10">
+          <button class="btn" id="showAllFloors" type="button">Show all floors</button>
+          <button class="btn" id="hideAllFloors" type="button">Hide all floors</button>
+          <button class="btn" id="addFloor" type="button">Add floor</button>
+        </div>
+        <div id="floorToggles" class="col"></div>
+      </div>
+    </details>
+
+    
+
+    <details class="panel">
+      <summary><span class="sumTitle">Counts</span><span class="sumRight"><span class="chev"></span></span></summary>
+      <div class="panelBody" id="counts"></div>
+    </details>
+
+    <details class="panel">
+      <summary><span class="sumTitle">Configuration</span><span class="sumRight"><span class="chev"></span></span></summary>
+      <div class="panelBody">
+        <div class="field"><label>Structure name</label><input id="structureName" type="text" /></div>
+
+        <div class="field sf-mt10">
+          <label>Add new item type</label>
+          <div class="row">
+            <input id="newTypeName" type="text" placeholder="e.g., SmokeDetector" />
+            <button class="btn" id="addType" type="button">Add type</button>
+          </div>
+          <div class="hint">Add new types such as tables, cabinets, chairs, rugs, etc.</div>
+        </div>
+
+        <div class="subtle sf-mt10">Defaults used for new items. Existing items render from their own values if present.</div>
+        <div id="cfgForm" class="col sf-mt10 sf-gap10"></div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><span class="sumTitle">View</span><span class="sumRight"><span class="chev"></span></span></summary>
       <div class="panelBody">
         <div class="grid2">
           <div class="field">
@@ -181,43 +219,7 @@ Notes
       </div>
     </details>
 
-    <details class="panel">
-      <summary><span class="sumTitle">Floors</span><span class="sumRight"><span id="floorSummary"></span><span class="chev"></span></span></summary>
-      <div class="panelBody">
-        <div class="btnRow sf-mb10">
-          <button class="btn" id="showAllFloors" type="button">Show all floors</button>
-          <button class="btn" id="hideAllFloors" type="button">Hide all floors</button>
-          <button class="btn" id="addFloor" type="button">Add floor</button>
-        </div>
-        <div id="floorToggles" class="col"></div>
-      </div>
-    </details>
 
-    
-
-    <details class="panel">
-      <summary><span class="sumTitle">Counts</span><span class="sumRight"><span class="chev"></span></span></summary>
-      <div class="panelBody" id="counts"></div>
-    </details>
-
-    <details class="panel">
-      <summary><span class="sumTitle">Configuration</span><span class="sumRight"><span class="chev"></span></span></summary>
-      <div class="panelBody">
-        <div class="field"><label>Structure name</label><input id="structureName" type="text" /></div>
-
-        <div class="field sf-mt10">
-          <label>Add new item type</label>
-          <div class="row">
-            <input id="newTypeName" type="text" placeholder="e.g., SmokeDetector" />
-            <button class="btn" id="addType" type="button">Add type</button>
-          </div>
-          <div class="hint">Add new types such as tables, cabinets, chairs, rugs, etc.</div>
-        </div>
-
-        <div class="subtle sf-mt10">Defaults used for new items. Existing items render from their own values if present.</div>
-        <div id="cfgForm" class="col sf-mt10 sf-gap10"></div>
-      </div>
-    </details>
 
     <details class="panel">
       <summary><span class="sumTitle">Export / Import</span><span class="sumRight"><span class="chev"></span></span></summary>

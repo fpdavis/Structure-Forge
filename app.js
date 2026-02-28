@@ -617,17 +617,18 @@ function buildSelectedForm(){
       const pick=document.createElement("input"); pick.type="color"; pick.id=`sel_${f.key}_picker`;
       txt.value=v;
       const hx=cssColorToHex(v); if(hx) pick.value=hx;
+      const commitColor=()=>{
+        if(!isValidCssColorToken(txt.value)) return;
+        obj[f.key]=txt.value.trim();
+        buildAll();
+        render();
+        markDirty();
+        pushHistory();
+      };
       pick.addEventListener("input",()=>{txt.value=pick.value.toLowerCase();});
+      pick.addEventListener("change",commitColor);
       txt.addEventListener("input",()=>{ const h=cssColorToHex(txt.value); if(h) pick.value=h; });
-      txt.addEventListener("change",()=>{
-        if(isValidCssColorToken(txt.value)){
-          obj[f.key]=txt.value.trim();
-          buildAll();
-          render();
-          markDirty();
-          pushHistory();
-        }
-      });
+      txt.addEventListener("change",commitColor);
       row.appendChild(txt); row.appendChild(pick);
       box.appendChild(lab); box.appendChild(row);
       wrap.appendChild(box);
@@ -1083,6 +1084,11 @@ function buildConfigForm(){
       const pick=document.createElement("input"); pick.type="color"; pick.id=`cfg_${id}_${key}_picker`;
       txt.value=st[key]; const hx=cssColorToHex(st[key]); if(hx) pick.value=hx;
       pick.addEventListener("input",()=>{txt.value=pick.value.toLowerCase();});
+      pick.addEventListener("change",()=>{
+        st[key]=pick.value.toLowerCase();
+        if(key==="defaultLineColor") sw.style.background=st[key];
+        applyStyle();
+      });
       txt.addEventListener("input",()=>{const h=cssColorToHex(txt.value); if(h) pick.value=h;});
       row.appendChild(txt); row.appendChild(pick);
       f.appendChild(lab); f.appendChild(row);
@@ -2026,7 +2032,12 @@ function cycleGridSize(dir){
 function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
-  ppi.addEventListener("input",()=>{state.ppi=parseInt(ppi.value,10); ppiValue.textContent=String(state.ppi); render(); _commitViewConfiguration();});
+  ppi.addEventListener("input",()=>{
+    state.ppi=parseInt(ppi.value,10);
+    if(ppiValue) ppiValue.textContent=String(state.ppi);
+    render();
+    _commitViewConfiguration();
+  });
 
   // ── Units (label mode only) ───────────────────────────────────────────
   const uImp=document.getElementById("unitsImperial");
