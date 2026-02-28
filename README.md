@@ -59,14 +59,10 @@ UI sections include:
   - Add a README sidebar panel reference table (panel name, purpose, key actions, primary data affected)
   - Update exporter/docs language so data model and UI references match glossary terms
   - Add a bug-report reference convention in docs (example: `[Sidebar > Configuration] Door default width not applied`)
-- **Additional keyboard shortcuts**
-  - Select All: Ctrl + A — Quickly selects every element in the current layout.
-  - Group / Ungroup: Ctrl + G to group selected elements and Ctrl + Shift + G to ungroup them.
+- **Additional keyboard shortcuts**    
   - Layer Order:
     - Bring Forward: Ctrl + ]
-    - Send Backward: Ctrl + [
-  - Align Top/Bottom/Left/Right: Using Alt + W/S/A/D provides a very fast way to snap elements to edges. 
-- Multi-select
+    - Send Backward: Ctrl + [  
 - Rulers along X/Y axis
  
 ### Interaction + UX improvements (medium)
