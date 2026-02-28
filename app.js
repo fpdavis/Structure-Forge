@@ -668,7 +668,7 @@ function buildSelectedForm(){
       }
       if(state.selected.kind==="room") applyDefaultsToObj(obj);
       else { ensureTypeExists(obj.type); applyDefaultsToObj(obj); }
-      buildAll();
+      if(!isLive) buildAll();
       render();
       markDirty();
       if(!isLive) pushHistory();
