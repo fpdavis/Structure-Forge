@@ -19,10 +19,10 @@ Structure Forge is a browser-based floor/structure layout tool for quickly model
 Use these terms consistently in docs, bug reports, PRs, and discussion.
 
 ### Data model terms
-- **Project**: top-level file payload (`schemaVersion`, `activeId`, `structures`)
+- **Project**: top-level file payload (`schemaVersion`, `activeId`, `defaultConfiguration`, `structures`)
 - **Structure**: one building/unit within a project (`structures[]`)
 - **Floor**: one level inside a structure (`house.floors[]`)
-- **Room**: rectangular space inside a floor (`floor.rooms[]`)
+- **Room**: main container space inside a floor (`floor.rooms[]`)
 - **Item Instance** (or **Item** in UI): placed object inside a room (`room.items[]`)
 - **Item Type**: reusable definition in `structure.types` (defaults like size/color/height)
 - **Geometry**: `xIn`, `yIn`, `wIn`, `hIn`, `heightIn`, `corner`
@@ -35,18 +35,19 @@ Use these terms consistently in docs, bug reports, PRs, and discussion.
 - **Corner anchor**: `corner` (`NW`, `NE`, `SW`, `SE`) defines which rectangle corner `xIn`/`yIn` refer to
 - **Normalization**: convert any corner-anchored rectangle to NW absolute rect for rendering/export
 
-### Left sidebar panel names
-Use these exact names when referring to UI sections:
+### Left Sidebar Panel - Where all settings, configurations, and help is displayed. This contains all radio buttons, input boxes, sliders, color pickers, drop downs, etc.
+UI sections include:
 - `Selected`
 - `Add New Item`
-- `View`
 - `Floors`
-- `Elements Visibility / Order`
-- `Label Visibility`
 - `Counts`
+- `View`
 - `Configuration`
+- `Elements Visibility / Order`
 - `Export / Import`
 - `Help / About`
+
+### Top Down Display - Shows the floor panels with the grid and rooms and items drawn.
 
 ---
 
@@ -66,17 +67,8 @@ Use these exact names when referring to UI sections:
     - Bring Forward: Ctrl + ]
     - Send Backward: Ctrl + [
   - Align Top/Bottom/Left/Right: Using Alt + W/S/A/D provides a very fast way to snap elements to edges. 
-- **Inline rename in lists**
-  - Enter to commit
-  - Esc to cancel
-- **Drop down on object details for what room the object belongs to**
-  - Reassign item to a different room from the details panel
-- **Ability to drag and drop objects from one room to another**
-  - From list to list, or via canvas drop target
-- LocalStorage autosave all changes
 - Multi-select
 - Rulers along X/Y axis
-- Optional grid snap
  
 ### Interaction + UX improvements (medium)
 - **Lock/freeze objects to prevent accidental edits**
@@ -88,8 +80,7 @@ Use these exact names when referring to UI sections:
   - Lock/unlock
   - Rename
 - **User selectable units**
-  - Inches, feet/inches, metric
-  - Display + input conversions
+  - input conversions
 - **Theme toggle (dark/light) with persisted setting**
 - **Improved User Interface**
   - Layout polish, discoverability, consistent controls
