@@ -36,7 +36,7 @@ const state={
   selectedSnapshot:null,
   view:{scale:1,tx:0,ty:0}
 };
-const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
+const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false, skipClickSelect:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
 const lasso={active:false, additive:false, bypassGroupExpand:false, startX:0, startY:0, boxEl:null, baseSelection:[]};
 const contextMenu={el:null, target:null};
@@ -613,17 +613,18 @@ function addItemToSelection(itemId, opts={}){
   if(ids.includes(itemId)) return;
   const expand=opts.expandGroups!==false;
   const addIds=expand ? expandSelectionByGroups([itemId]) : [itemId];
-  setSelectedItems([...ids, ...addIds], itemId);
+  setSelectedItems([...ids, ...addIds], itemId, {expandGroups:expand});
 }
-function toggleItemInSelection(itemId){
+function toggleItemInSelection(itemId, opts={}){
   const ids=getSelectedItemIds();
+  const expand=opts.expandGroups!==false;
   if(ids.includes(itemId)){
     const next=ids.filter(id=>id!==itemId);
-    setSelectedItems(next, next[next.length-1]||null);
+    setSelectedItems(next, next[next.length-1]||null, {expandGroups:expand});
     return;
   }
   ids.push(itemId);
-  setSelectedItems(ids, itemId);
+  setSelectedItems(ids, itemId, {expandGroups:expand});
 }
 function groupSelectedItems(){
   const ids=getSelectedItemIds();
@@ -2120,14 +2121,15 @@ function render(){
           if(it.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
           const onClick=(ev)=>{ev.stopPropagation();
+            if(drag.skipClickSelect){ drag.skipClickSelect=false; return; }
             if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
-            else if(ev.ctrlKey) addItemToSelection(it.id, {expandGroups:false});
+            else if(ev.ctrlKey) toggleItemInSelection(it.id, {expandGroups:false});
             else setSelectedItems([it.id], it.id);
             populateNewItemSelectors();
           };
           const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation();
-            if(ev.shiftKey||ev.metaKey) toggleItemInSelection(it.id);
-            else if(ev.ctrlKey) addItemToSelection(it.id, {expandGroups:false});
+            if(ev.shiftKey||ev.metaKey){ toggleItemInSelection(it.id); drag.skipClickSelect=true; }
+            else if(ev.ctrlKey){ toggleItemInSelection(it.id, {expandGroups:false}); drag.skipClickSelect=true; }
             else if(!isSelectedItemId(it.id)) setSelectedItems([it.id], it.id);
             drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
@@ -2722,7 +2724,7 @@ function wire(){
     }
     if(drag.active && drag.moved){ pushHistory(); }
     drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null; drag.itemIds=null; drag.startItems=null;
-    drag.preState=null; drag.preSelected=null; drag.moved=false;
+    drag.preState=null; drag.preSelected=null; drag.moved=false; drag.skipClickSelect=false;
   });
 }
 
