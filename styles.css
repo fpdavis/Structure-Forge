@@ -33,6 +33,11 @@ details[open] .chev{transform:rotate(45deg)}
 .field{display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
 .field label{font-size:11px;color:var(--muted)}
 .field input,.field select,.field textarea{width:100%;padding:7px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);color:var(--text);font-size:12px;outline:none}
+
+.field select{background:rgba(10,12,18,.95);color:var(--text);}
+.field select option{background:#111521;color:var(--text);}
+.field select optgroup{background:#0f1320;color:#d8e0ee;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(106,166,255,.2);}
 .field textarea{min-height:70px;resize:vertical}
 .canvasWrap{overflow:hidden;height:100%;padding:12px;background:radial-gradient(circle at 20% 20%, rgba(106,166,255,.08), transparent 55%),radial-gradient(circle at 80% 30%, rgba(255,106,106,.06), transparent 60%),var(--grid)}
 .floorBlock{margin:0 0 var(--gap);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 18px 30px var(--shadow);background:rgba(255,255,255,.02)}
