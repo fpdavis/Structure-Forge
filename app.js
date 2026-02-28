@@ -36,8 +36,9 @@ const state={
   selectedSnapshot:null,
   view:{scale:1,tx:0,ty:0}
 };
-const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
+const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
+const lasso={active:false, additive:false, startX:0, startY:0, boxEl:null, baseSelection:[]};
 const contextMenu={el:null, target:null};
 
 // ── Nudge configuration (inches) ─────────────────────────────────────────────
@@ -546,6 +547,42 @@ function reassignItemToRoom(itemId, targetRoomId){
   return true;
 }
 
+function getSelectedItemIds(){
+  if(state.selected?.kind!=="item") return [];
+  if(Array.isArray(state.selected.itemIds) && state.selected.itemIds.length){
+    return [...new Set(state.selected.itemIds)];
+  }
+  return state.selected.itemId ? [state.selected.itemId] : [];
+}
+function isMultiItemSelection(){ return getSelectedItemIds().length>1; }
+function isSelectedItemId(itemId){ return getSelectedItemIds().includes(itemId); }
+function setSelectedItems(itemIds, lastItemId=null){
+  const uniq=[...new Set((itemIds||[]).filter(Boolean))].filter(id=>findItem(id));
+  if(!uniq.length){ setSelected(null); return; }
+  const last=(lastItemId && uniq.includes(lastItemId)) ? lastItemId : uniq[uniq.length-1];
+  const res=findItem(last);
+  if(!res){ setSelected(null); return; }
+  const sel={kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:last};
+  if(uniq.length>1) sel.itemIds=uniq;
+  setSelected(sel);
+}
+function addItemToSelection(itemId){
+  const ids=getSelectedItemIds();
+  if(ids.includes(itemId)) return;
+  ids.push(itemId);
+  setSelectedItems(ids, itemId);
+}
+function toggleItemInSelection(itemId){
+  const ids=getSelectedItemIds();
+  if(ids.includes(itemId)){
+    const next=ids.filter(id=>id!==itemId);
+    setSelectedItems(next, next[next.length-1]||null);
+    return;
+  }
+  ids.push(itemId);
+  setSelectedItems(ids, itemId);
+}
+
 const ROOM_FIELDS=[
   {key:"name",label:"Name",kind:"text"},
   {key:"description",label:"Description",kind:"textarea"},
@@ -586,18 +623,22 @@ function buildSelectedForm(){
   wrap.innerHTML="";
   if(!state.selected){ header.textContent="(none)"; wrap.innerHTML='<div class="subtle" style="grid-column:1/-1;">Click a room or item to edit its parameters.</div>'; return; }
 
+  const selectedIds=getSelectedItemIds();
+  const multiItems=selectedIds.length>1;
+
   let obj=null, floorName="", roomName="";
   if(state.selected.kind==="room"){
     const res=findRoom(state.selected.roomId); if(!res) return;
-    obj=res.room; floorName=res.floor.name; header.textContent=`${floorName} \u00b7 Room`;
+    obj=res.room; floorName=res.floor.name; header.textContent=`${floorName} · Room`;
   } else {
     const res=findItem(state.selected.itemId); if(!res) return;
-    obj=res.item; floorName=res.floor.name; roomName=res.room.name; header.textContent=`${floorName} \u00b7 ${roomName} \u00b7 ${obj.type}`;
+    obj=res.item; floorName=res.floor.name; roomName=res.room.name;
+    header.textContent=multiItems ? "Multi-select" : `${floorName} · ${roomName} · ${obj.type}`;
   }
 
   const fields = state.selected.kind==="room" ? ROOM_FIELDS : ITEM_FIELDS;
 
-  if(state.selected.kind==="item"){
+  if(state.selected.kind==="item" && !multiItems){
     const currentItem=findItem(state.selected.itemId);
     if(currentItem){
       const roomField=document.createElement("div"); roomField.className="field";
@@ -642,7 +683,12 @@ function buildSelectedForm(){
       const hx=cssColorToHex(v); if(hx) pick.value=hx;
       const commitColor=()=>{
         if(!isValidCssColorToken(txt.value)) return;
-        obj[f.key]=txt.value.trim();
+        const targets=(state.selected.kind==="item" && selectedIds.length)?selectedIds.map(id=>findItem(id)?.item).filter(Boolean):[obj];
+        for(const target of targets){
+          target[f.key]=txt.value.trim();
+          if(state.selected.kind==="item") ensureTypeExists(target.type);
+          applyDefaultsToObj(target);
+        }
         buildAll();
         render();
         markDirty();
@@ -683,26 +729,29 @@ function buildSelectedForm(){
     input.id=`sel_${f.key}`;
     let v=obj?.[f.key]??"";
     if(f.kind==="checkbox") v=!!obj?.[f.key];
-    // For select fields, fall back to first option rather than leaving blank
     if((f.kind==="select"||f.kind==="selectDynamic") && v==="" && input.options.length) v=input.options[0].value;
     if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha"].includes(f.key) && v!=="" && Number.isFinite(+v)){
       const step=(f.step?parseFloat(f.step):0.5);
       v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
     }
     if(f.kind==="checkbox") input.checked=!!v; else input.value=v;
+    if(multiItems && f.key==="name") input.disabled=true;
 
     const commitValue=(isLive)=>{
       const raw=f.kind==="checkbox" ? input.checked : input.value;
-      if(f.kind==="number" || f.kind==="range"){
-        const num=parseFloat(raw);
-        if(Number.isFinite(num)) obj[f.key]=num;
-      } else if(f.kind==="checkbox"){
-        obj[f.key]=!!raw;
-      } else {
-        obj[f.key]=raw;
+      const targets=(state.selected.kind==="item" && selectedIds.length)?selectedIds.map(id=>findItem(id)?.item).filter(Boolean):[obj];
+      for(const target of targets){
+        if(f.kind==="number" || f.kind==="range"){
+          const num=parseFloat(raw);
+          if(Number.isFinite(num)) target[f.key]=num;
+        } else if(f.kind==="checkbox"){
+          target[f.key]=!!raw;
+        } else {
+          target[f.key]=raw;
+        }
+        if(state.selected.kind==="room") applyDefaultsToObj(target);
+        else { ensureTypeExists(target.type); applyDefaultsToObj(target); }
       }
-      if(state.selected.kind==="room") applyDefaultsToObj(obj);
-      else { ensureTypeExists(obj.type); applyDefaultsToObj(obj); }
       if(!isLive) buildAll();
       render();
       markDirty();
@@ -787,6 +836,15 @@ function showContextMenu(clientX, clientY){
 
 // Selected edits live-commit; no explicit Save/Reset/Clear controls.
 
+function getSelectedItemContexts(){
+  const out=[];
+  for(const id of getSelectedItemIds()){
+    const res=findItem(id);
+    if(res) out.push(res);
+  }
+  return out;
+}
+
 function copySelected(){
   if(!state.selected){ clipboard.kind=null; clipboard.data=null; clipboard.source={floorId:null,roomId:null}; return; }
   if(state.selected.kind==="room"){
@@ -795,14 +853,14 @@ function copySelected(){
     clipboard.data=JSON.parse(JSON.stringify(res.room));
     clipboard.source={floorId:res.floor.id, roomId:res.room.id};
   } else {
-    const res=findItem(state.selected.itemId); if(!res) return;
-    // Store an item snapshot plus its NW-relative position within the source room.
+    const selectedItems=getSelectedItemContexts();
+    if(!selectedItems.length) return;
     clipboard.kind="item";
-    clipboard.data={
+    clipboard.data=selectedItems.map((res)=>({
       item: JSON.parse(JSON.stringify(res.item)),
       relNW: normalizeRectRelToRoomPrimary(res.item, res.room)
-    };
-    clipboard.source={floorId:res.floor.id, roomId:res.room.id};
+    }));
+    clipboard.source={floorId:selectedItems[selectedItems.length-1].floor.id, roomId:selectedItems[selectedItems.length-1].room.id};
   }
 }
 
@@ -813,8 +871,10 @@ function cutSelected(){
     const res=findRoom(state.selected.roomId); if(!res) return;
     res.floor.rooms=res.floor.rooms.filter(r=>r.id!==res.room.id);
   } else {
-    const res=findItem(state.selected.itemId); if(!res) return;
-    res.room.items=res.room.items.filter(i=>i.id!==res.item.id);
+    const ids=new Set(getSelectedItemIds());
+    for(const floor of HOUSE.floors||[]) for(const room of floor.rooms||[]){
+      room.items=(room.items||[]).filter(i=>!ids.has(i.id));
+    }
   }
   state.selected=null; state.selectedSnapshot=null;
   buildAll(); render();
@@ -855,21 +915,25 @@ function pasteClipboard(){
     // Item paste: paste into selected room or the room that owns the selected item.
     if(!targetRoomId){ alert("Select a room first (or select an item inside a room)."); return; }
     const res=findRoom(targetRoomId); if(!res){ alert("Room not found."); return; }
-    const srcItem=clipboard.data.item;
-    const copy=JSON.parse(JSON.stringify(srcItem));
-    copy.id=guid();
-    copy.roomId=res.room.id;
-    copy.name=(copy.name||copy.type)+" (Copy)";
-    // Place copy's NW corner at center of the source item (relative to target room).
-    const origRel=clipboard.data.relNW;
-    const cx=origRel.xIn+(srcItem.wIn||0)/2;
-    const cy=origRel.yIn+(srcItem.hIn||0)/2;
-    copy.corner="NW";
-    setItemFromNW_Rel(copy, res.room, cx, cy);
-    ensureTypeExists(copy.type);
-    applyDefaultsToObj(copy);
-    res.room.items.push(copy);
-    setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
+    const entries=Array.isArray(clipboard.data)?clipboard.data:[clipboard.data];
+    const newIds=[];
+    for(const entry of entries){
+      const srcItem=entry.item;
+      const copy=JSON.parse(JSON.stringify(srcItem));
+      copy.id=guid();
+      copy.roomId=res.room.id;
+      copy.name=(copy.name||copy.type)+" (Copy)";
+      const origRel=entry.relNW;
+      const cx=origRel.xIn+(srcItem.wIn||0)/2;
+      const cy=origRel.yIn+(srcItem.hIn||0)/2;
+      copy.corner="NW";
+      setItemFromNW_Rel(copy, res.room, cx, cy);
+      ensureTypeExists(copy.type);
+      applyDefaultsToObj(copy);
+      res.room.items.push(copy);
+      newIds.push(copy.id);
+    }
+    setSelectedItems(newIds, newIds[newIds.length-1]||null);
   }
 
   buildAll(); render();
@@ -890,14 +954,18 @@ function duplicateSelected(){
     res.floor.rooms.push(copy);
     setSelected({kind:"room", floorId:res.floor.id, roomId:copy.id});
   } else {
-    const res=findItem(state.selected.itemId); if(!res) return;
-    const copy=JSON.parse(JSON.stringify(res.item)); copy.id=guid(); copy.name=(copy.name||copy.type)+" (Copy)"; copy.roomId=res.room.id;
-    // Place copy's NW corner at center of original (relative to room)
-    const origRel=normalizeRectRelToRoomPrimary(res.item, res.room);
-    const cx=origRel.xIn+res.item.wIn/2; const cy=origRel.yIn+res.item.hIn/2;
-    copy.corner="NW"; copy.xIn=cx; copy.yIn=cy;
-    res.room.items.push(copy);
-    setSelected({kind:"item", floorId:res.floor.id, roomId:res.room.id, itemId:copy.id});
+    const contexts=getSelectedItemContexts();
+    if(!contexts.length) return;
+    const newIds=[];
+    for(const res of contexts){
+      const copy=JSON.parse(JSON.stringify(res.item)); copy.id=guid(); copy.name=(copy.name||copy.type)+" (Copy)"; copy.roomId=res.room.id;
+      const origRel=normalizeRectRelToRoomPrimary(res.item, res.room);
+      const cx=origRel.xIn+res.item.wIn/2; const cy=origRel.yIn+res.item.hIn/2;
+      copy.corner="NW"; copy.xIn=cx; copy.yIn=cy;
+      res.room.items.push(copy);
+      newIds.push(copy.id);
+    }
+    setSelectedItems(newIds, newIds[newIds.length-1]||null);
   }
   buildAll(); render();
   markDirty();
@@ -910,9 +978,16 @@ function deleteSelected(){
     if(!confirm(`Delete room "${res.room.name}" (and all items inside)?`)) return;
     res.floor.rooms=res.floor.rooms.filter(r=>r.id!==res.room.id);
   } else {
-    const res=findItem(state.selected.itemId); if(!res) return;
-    if(!confirm(`Delete item "${res.item.name||res.item.type}"?`)) return;
-    res.room.items=res.room.items.filter(i=>i.id!==res.item.id);
+    const ids=getSelectedItemIds();
+    if(!ids.length) return;
+    if(ids.length===1){
+      const res=findItem(ids[0]); if(!res) return;
+      if(!confirm(`Delete item "${res.item.name||res.item.type}"?`)) return;
+    } else if(!confirm(`Delete ${ids.length} selected items?`)) return;
+    const idSet=new Set(ids);
+    for(const floor of HOUSE.floors||[]) for(const room of floor.rooms||[]){
+      room.items=(room.items||[]).filter(i=>!idSet.has(i.id));
+    }
   }
   state.selected=null; state.selectedSnapshot=null;
   buildAll(); render();
@@ -1833,6 +1908,7 @@ function render(){
       rect.setAttribute("stroke",room.lineColor||st.defaultLineColor);
       rect.setAttribute("stroke-width",st.strokeWidth);
       rect.classList.add("selectable");
+      rect.dataset.selKind="room"; rect.dataset.roomId=room.id;
       const roomSelected=state.selected?.kind==="room" && state.selected.roomId===room.id;
       if(roomSelected) rect.classList.add("selected-stroke");
 
@@ -1845,6 +1921,7 @@ function render(){
       marker.setAttribute("fill",room.cornerColor||st.defaultCornerColor);
       marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
       marker.classList.add("selectable");
+      marker.dataset.selKind="room"; marker.dataset.roomId=room.id;
       if(room.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
       const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"room", floorId:floor.id, roomId:room.id}); populateNewItemSelectors();};
@@ -1944,7 +2021,8 @@ function render(){
           rect.setAttribute("stroke",it.lineColor||st.defaultLineColor);
           rect.setAttribute("stroke-width",st.strokeWidth);
           rect.classList.add("selectable");
-          const itemSelected=state.selected?.kind==="item" && state.selected.itemId===it.id;
+          rect.dataset.selKind="item"; rect.dataset.itemId=it.id;
+          const itemSelected=isSelectedItemId(it.id);
           if(itemSelected) rect.classList.add("selected-stroke");
 
           const markerSize=clamp(inToPx(4),6,18);
@@ -1956,12 +2034,22 @@ function render(){
           marker.setAttribute("fill",it.cornerColor||st.defaultCornerColor);
           marker.setAttribute("stroke","rgba(0,0,0,0.45)"); marker.setAttribute("stroke-width",1);
           marker.classList.add("selectable");
+          marker.dataset.selKind="item"; marker.dataset.itemId=it.id;
           if(it.locked){ rect.classList.add("locked-object"); marker.classList.add("locked-object"); }
 
-          const onClick=(ev)=>{ev.stopPropagation(); setSelected({kind:"item", floorId:floor.id, roomId:room.id, itemId:it.id}); populateNewItemSelectors();};
-          const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation(); onClick(ev);
+          const onClick=(ev)=>{ev.stopPropagation();
+            if(ev.shiftKey||ev.ctrlKey||ev.metaKey) toggleItemInSelection(it.id);
+            else setSelectedItems([it.id], it.id);
+            populateNewItemSelectors();
+          };
+          const onDown=(ev)=>{if(ev.button!==0) return; if(it.locked) return; ev.preventDefault(); ev.stopPropagation();
+            if(ev.shiftKey||ev.ctrlKey||ev.metaKey) toggleItemInSelection(it.id);
+            else if(!isSelectedItemId(it.id)) setSelectedItems([it.id], it.id);
             drag.active=true; drag.kind="item"; drag.floorId=floor.id; drag.roomId=room.id; drag.itemId=it.id;
             drag.startClientX=ev.clientX; drag.startClientY=ev.clientY;
+            const baseIds=getSelectedItemIds();
+            drag.itemIds=baseIds.length?baseIds:[it.id];
+            drag.startItems=drag.itemIds.map(id=>{ const src=findItem(id); if(!src) return null; const rel=normalizeRectRelToRoomPrimary(src.item, src.room); return {itemId:id, roomId:src.room.id, xIn:rel.xIn, yIn:rel.yIn}; }).filter(Boolean);
             const rel=normalizeRectRelToRoomPrimary(it, room);
             drag.startNW={xIn:rel.xIn,yIn:rel.yIn};
             drag.preState=JSON.parse(JSON.stringify(HOUSE)); drag.preSelected=state.selected?JSON.parse(JSON.stringify(state.selected)):null; drag.moved=false; };
@@ -1976,7 +2064,7 @@ function render(){
           };
           rect.addEventListener("click",onClick); marker.addEventListener("click",onClick);
           rect.addEventListener("mousedown",onDown);
-          const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=state.selected?.kind==="item" && state.selected.itemId===it.id; if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
+          const onRightDown=(ev)=>{ if(ev.button!==2) return; ev.preventDefault(); const alreadySelected=isSelectedItemId(it.id); if(!alreadySelected) return; drag.moved=false; drag.startClientX=ev.clientX; drag.startClientY=ev.clientY; drag.kind="context-candidate"; };
           rect.addEventListener("mousedown",onRightDown); marker.addEventListener("mousedown",onRightDown);
 
           g.appendChild(rect); g.appendChild(marker);
@@ -2038,7 +2126,7 @@ function render(){
     }
 
     if(gridGroup && state.grid.mode==="over") svg.appendChild(gridGroup);
-    svg.addEventListener("click",()=>setSelected(null));
+    svg.addEventListener("click",()=>{ if(!lasso.active) setSelected(null); });
     svg.appendChild(labelGroup);
     block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
   }
@@ -2218,7 +2306,7 @@ function wire(){
         ev.preventDefault();
         ACTIVE.house=JSON.parse(JSON.stringify(drag.preState));
         HOUSE=ACTIVE.house;
-        drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null;
+        drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null; drag.itemIds=null; drag.startItems=null;
         drag.preState=null; drag.moved=false;
         state.selected=drag.preSelected?JSON.parse(JSON.stringify(drag.preSelected)):null;
         drag.preSelected=null;
@@ -2269,6 +2357,13 @@ function wire(){
       if(k==="x"||k==="X"){ ev.preventDefault(); cutSelected(); return; }
       if(k==="v"||k==="V"){ ev.preventDefault(); pasteClipboard(); return; }
       if(k==="d"||k==="D"){ ev.preventDefault(); duplicateSelected(); return; }
+      if(k==="a"||k==="A"){
+        ev.preventDefault();
+        const ids=[];
+        for(const floor of HOUSE.floors||[]) for(const room of floor.rooms||[]) for(const it of room.items||[]) ids.push(it.id);
+        setSelectedItems(ids, ids[ids.length-1]||null);
+        return;
+      }
     }
     if(ev.shiftKey && ev.key==="Insert"){ ev.preventDefault(); pasteClipboard(); return; }
 
@@ -2319,11 +2414,35 @@ function wire(){
       zoomToFitHeight();
       return;
     }
-    if(ev.shiftKey && ev.key==="n"||ev.key==="N"){ 
+    if(ev.shiftKey && (ev.key==="n"||ev.key==="N")){ 
 	  ev.preventDefault();
 	  newStructure();
 	  return; 
 	}
+
+    if(ev.shiftKey && ["W","A","S","D","w","a","s","d"].includes(ev.key)){
+      const ids=getSelectedItemIds();
+      if(ids.length<2) return;
+      ev.preventDefault();
+      const anchorId=state.selected?.itemId;
+      const anchorRes=findItem(anchorId);
+      if(!anchorRes) return;
+      const anchor=itemAbsRect(anchorRes.item, anchorRes.room);
+      for(const id of ids){
+        if(id===anchorId) continue;
+        const res=findItem(id); if(!res || res.item.locked) continue;
+        const abs=itemAbsRect(res.item, res.room);
+        let nx=abs.xIn, ny=abs.yIn;
+        if(ev.key==="W"||ev.key==="w") ny=anchor.yIn;
+        if(ev.key==="S"||ev.key==="s") ny=anchor.yIn+anchor.hIn-abs.hIn;
+        if(ev.key==="A"||ev.key==="a") nx=anchor.xIn;
+        if(ev.key==="D"||ev.key==="d") nx=anchor.xIn+anchor.wIn-abs.wIn;
+        const roomNW=normalizeRectAbs(res.room);
+        setItemFromNW_Rel(res.item,res.room,nx-roomNW.xIn,ny-roomNW.yIn);
+      }
+      buildSelectedForm(); render(); markDirty(); pushHistory();
+      return;
+    }
 	
     // ── Delete / Insert ───────────────────────────────────────────────────
     if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); return; }
@@ -2342,9 +2461,11 @@ function wire(){
         const rr=normalizeRectAbs(res.room);
         setRoomFromNW(res.room, rr.xIn+dx, rr.yIn+dy);
       } else {
-        const res=findItem(state.selected.itemId); if(!res) return;
-        const rel=normalizeRectRelToRoomPrimary(res.item, res.room);
-        setItemFromNW_Rel(res.item, res.room, rel.xIn+dx, rel.yIn+dy);
+        for(const id of getSelectedItemIds()){
+          const res=findItem(id); if(!res || res.item.locked) continue;
+          const rel=normalizeRectRelToRoomPrimary(res.item, res.room);
+          setItemFromNW_Rel(res.item, res.room, rel.xIn+dx, rel.yIn+dy);
+        }
       }
       buildSelectedForm(); render();
       markDirty();
@@ -2472,11 +2593,19 @@ function wire(){
       setRoomFromNW(res.room,nwX,nwY);
       updateSelectedXYInputs(res.room);
     } else {
-      const res=findItem(drag.itemId); if(!res || res.item.locked) return;
-      const nwX=drag.startNW.xIn+dxIn;
-      const nwY=drag.startNW.yIn+dyIn;
-      setItemFromNW_Rel(res.item,res.room,nwX,nwY);
-      updateSelectedXYInputs(res.item);
+      const starts=Array.isArray(drag.startItems)&&drag.startItems.length ? drag.startItems : null;
+      if(starts){
+        for(const st of starts){
+          const res=findItem(st.itemId); if(!res || res.item.locked) continue;
+          setItemFromNW_Rel(res.item,res.room,st.xIn+dxIn,st.yIn+dyIn);
+        }
+      } else {
+        const res=findItem(drag.itemId); if(!res || res.item.locked) return;
+        const nwX=drag.startNW.xIn+dxIn;
+        const nwY=drag.startNW.yIn+dyIn;
+        setItemFromNW_Rel(res.item,res.room,nwX,nwY);
+        updateSelectedXYInputs(res.item);
+      }
     }
     if(!drag.raf){
       drag.raf=true;
@@ -2489,15 +2618,18 @@ function wire(){
       if(!moved) showContextMenu(ev.clientX||0, ev.clientY||0);
     }
     if(drag.active && drag.moved && drag.kind==="item"){
-      const res=findItem(drag.itemId);
-      if(res){
+      const draggedIds=(Array.isArray(drag.itemIds)&&drag.itemIds.length)?drag.itemIds:[drag.itemId];
+      for(const id of draggedIds){
+        const res=findItem(id);
+        if(!res) continue;
         const abs=itemAbsRect(res.item, res.room);
         const dropTarget=findRoomOnFloorAtAbsPoint(res.floor.id, abs.xIn+abs.wIn/2, abs.yIn+abs.hIn/2, res.room.id);
         if(dropTarget) reassignItemToRoom(res.item.id, dropTarget.room.id);
       }
+      if(draggedIds.length>1) setSelectedItems(draggedIds, drag.itemId);
     }
     if(drag.active && drag.moved){ pushHistory(); }
-    drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null;
+    drag.active=false; drag.kind=null; drag.floorId=null; drag.roomId=null; drag.itemId=null; drag.itemIds=null; drag.startItems=null;
     drag.preState=null; drag.preSelected=null; drag.moved=false;
   });
 }
@@ -2606,6 +2738,32 @@ async function initApp(forceSeed=false){
 
 wire();
 (async()=>{await initApp(false);})();
+function updateLassoBox(clientX, clientY){
+  if(!lasso.active || !lasso.boxEl) return;
+  const left=Math.min(lasso.startX, clientX);
+  const top=Math.min(lasso.startY, clientY);
+  const width=Math.abs(clientX-lasso.startX);
+  const height=Math.abs(clientY-lasso.startY);
+  lasso.boxEl.style.left=`${left}px`;
+  lasso.boxEl.style.top=`${top}px`;
+  lasso.boxEl.style.width=`${width}px`;
+  lasso.boxEl.style.height=`${height}px`;
+
+  const r={left,top,right:left+width,bottom:top+height};
+  const ids=new Set(lasso.additive?lasso.baseSelection:[]);
+  document.querySelectorAll('.selectable[data-sel-kind="item"][data-item-id]').forEach((el)=>{
+    const b=el.getBoundingClientRect();
+    const hit=!(b.right<r.left || b.left>r.right || b.bottom<r.top || b.top>r.bottom);
+    if(hit) ids.add(el.dataset.itemId);
+  });
+  setSelectedItems([...ids]);
+}
+function endLasso(){
+  if(!lasso.active) return;
+  lasso.active=false;
+  if(lasso.boxEl){ lasso.boxEl.remove(); lasso.boxEl=null; }
+}
+
 function initPanZoom(){
   const wrap=document.getElementById("canvasWrap");
   if(!wrap || wrap.__pz) return;
@@ -2635,16 +2793,31 @@ function initPanZoom(){
     if(ev.button===2){
       ev.preventDefault();
       pan.active=true; pan.startX=ev.clientX; pan.startY=ev.clientY; pan.startTx=state.view.tx; pan.startTy=state.view.ty;
+      return;
     }
+    if(ev.button!==0) return;
+    if(ev.target?.closest('.selectable')) return;
+    ev.preventDefault();
+    lasso.active=true;
+    lasso.additive=!!(ev.shiftKey||ev.ctrlKey||ev.metaKey);
+    lasso.startX=ev.clientX;
+    lasso.startY=ev.clientY;
+    lasso.baseSelection=lasso.additive?getSelectedItemIds():[];
+    const box=document.createElement('div');
+    box.className='sf-lassoBox';
+    box.style.left=`${ev.clientX}px`; box.style.top=`${ev.clientY}px`; box.style.width='0px'; box.style.height='0px';
+    document.body.appendChild(box);
+    lasso.boxEl=box;
   });
   window.addEventListener("mousemove",(ev)=>{
     if(contextMenu.el && drag.active) hideContextMenu();
+    if(lasso.active) updateLassoBox(ev.clientX, ev.clientY);
     if(!pan.active) return;
     state.view.tx=pan.startTx+(ev.clientX-pan.startX);
     state.view.ty=pan.startTy+(ev.clientY-pan.startY);
     render();
   });
-  window.addEventListener("mouseup",()=>{pan.active=false;});
+  window.addEventListener("mouseup",()=>{pan.active=false; endLasso();});
   document.addEventListener("mousedown",(ev)=>{
     if(contextMenu.el && !contextMenu.el.contains(ev.target)) hideContextMenu();
   });
