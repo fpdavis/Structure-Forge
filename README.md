@@ -70,24 +70,14 @@ UI sections include:
 - Rulers along X/Y axis
  
 ### Interaction + UX improvements (medium)
-- **Lock/freeze objects to prevent accidental edits**
-  - Per-object lock
-  - Optional floor-level lock
+- Floor-level lock
 - **Context menu (right-click)**
-  - Duplicate, delete
   - Bring front/back
-  - Lock/unlock
-  - Rename
 - **User selectable units**
   - input conversions
-- **Theme toggle (dark/light) with persisted setting**
-- **Improved User Interface**
-  - Layout polish, discoverability, consistent controls
-
-### Geometry + analysis features (medium → hard)
-- **Rotation**
-  - Rotate items, and optionally rooms
-  - Persist rotation and update export logic
+- Theme toggle (dark/light) with persisted setting
+- Layout polish
+- Rotate items within rotated rooms
 
 ### Advanced object modeling (hard)
 - **Different object shapes**
