@@ -8,6 +8,7 @@ const ROOM_FIELDS=[
   {key:"hIn",label:"Length",unit:true,kind:"number"},
   {key:"heightIn",label:"Height",unit:true,kind:"number"},
   {key:"rotation",label:"Rotation",kind:"range",min:"0",max:"360",step:"1"},
+  {key:"zIndex",label:"Z-Index",kind:"number",step:"1"},
   {key:"locked",label:"Lock",kind:"checkbox"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
@@ -25,6 +26,7 @@ const ITEM_FIELDS=[
   {key:"hIn",label:"Length",unit:true,kind:"number"},
   {key:"heightIn",label:"Height",unit:true,kind:"number"},
   {key:"rotation",label:"Rotation",kind:"range",min:"0",max:"360",step:"1"},
+  {key:"zIndex",label:"Z-Index",kind:"number",step:"1"},
   {key:"locked",label:"Lock",kind:"checkbox"},
   {key:"cornerColor",label:"Corner Color",kind:"color"},
   {key:"lineColor",label:"Line Color",kind:"color"},
@@ -145,9 +147,10 @@ function buildSelectedForm(){
     let v=obj?.[f.key]??"";
     if(f.kind==="checkbox") v=!!obj?.[f.key];
     if((f.kind==="select"||f.kind==="selectDynamic") && v==="" && input.options.length) v=input.options[0].value;
-    if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha"].includes(f.key) && v!=="" && Number.isFinite(+v)){
+    if(["xIn","yIn","wIn","hIn","heightIn","fillAlpha","zIndex"].includes(f.key) && v!=="" && Number.isFinite(+v)){
       const step=(f.step?parseFloat(f.step):0.5);
-      v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
+      if(f.key==="zIndex") v=String(Math.trunc(+v));
+      else v=String(step===0.01?Math.round(+v*100)/100:roundHalf(+v));
     }
     if(f.kind==="checkbox") input.checked=!!v; else input.value=v;
     if(multiItems && f.key==="name") input.disabled=true;
@@ -158,7 +161,7 @@ function buildSelectedForm(){
       for(const target of targets){
         if(f.kind==="number" || f.kind==="range"){
           const num=parseFloat(raw);
-          if(Number.isFinite(num)) target[f.key]=num;
+          if(Number.isFinite(num)) target[f.key]=(f.key==="zIndex"?Math.trunc(num):num);
         } else if(f.kind==="checkbox"){
           target[f.key]=!!raw;
         } else {

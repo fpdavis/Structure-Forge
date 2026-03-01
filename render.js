@@ -172,7 +172,13 @@ function render(){
     labelGroup.setAttribute("class","labelLayer");
 
     // Rooms
-    for(const room of floor.rooms){
+    const sortedRooms=[...(floor.rooms||[])].sort((a,b)=>{
+      const za=Number(a.zIndex)||0;
+      const zb=Number(b.zIndex)||0;
+      if(za!==zb) return za-zb;
+      return getTypeDisplayOrderIndex(a.type)-getTypeDisplayOrderIndex(b.type);
+    });
+    for(const room of sortedRooms){
       applyDefaultsToObj(room);
       const rr=normalizeRectAbs(room);
       const x=fx(rr.xIn), y=fy(rr.yIn), w=inToPx(rr.wIn), h=inToPx(rr.hIn);
@@ -280,10 +286,21 @@ function render(){
     }
 
     // Other types
-    for(const type of ACTIVE.typeOrder){
+    const floorItems=[];
+    for(const room of floor.rooms||[]){
+      for(const it of room.items||[]) floorItems.push({room,it});
+    }
+    floorItems.sort((a,b)=>{
+      const za=Number(a.it.zIndex)||0;
+      const zb=Number(b.it.zIndex)||0;
+      if(za!==zb) return za-zb;
+      return getTypeDisplayOrderIndex(a.it.type)-getTypeDisplayOrderIndex(b.it.type);
+    });
+    for(const entry of floorItems){
+      const room=entry.room;
+      const it=entry.it;
+      const type=it.type;
       if(type==="Room" || !isTypeVisible(type)) continue;
-      for(const room of floor.rooms){
-        for(const it of room.items.filter(i=>i.type===type)){
           ensureTypeExists(it.type);
           applyDefaultsToObj(it);
           const abs=itemAbsRect(it, room);
@@ -403,8 +420,6 @@ function render(){
             labelGroup.appendChild(t);
           }
           svg.appendChild(g);
-        }
-      }
     }
 
     if(gridGroup && state.grid.mode==="over") svg.appendChild(gridGroup);

@@ -67,6 +67,7 @@ function _hydrateStructure(s){
       if(!Number.isFinite(Number(room.rotation))) room.rotation = normalizeRotation(td.Room?.defaultRotation ?? 0);
       else room.rotation = normalizeRotation(room.rotation);
       room.locked = !!room.locked;
+      room.zIndex = Number.isFinite(Number(room.zIndex)) ? Math.trunc(Number(room.zIndex)) : getDefaultZIndexForType("Room");
       for(const item of (room.items||[])){
         if(!item.corner)  item.corner  = "NW";
         if(!item.roomId)  item.roomId  = room.id;
@@ -77,6 +78,7 @@ function _hydrateStructure(s){
         if(!Number.isFinite(Number(item.rotation))) item.rotation = normalizeRotation(st.defaultRotation ?? 0);
         else item.rotation = normalizeRotation(item.rotation);
         item.locked = !!item.locked;
+        item.zIndex = Number.isFinite(Number(item.zIndex)) ? Math.trunc(Number(item.zIndex)) : getDefaultZIndexForType(item.type);
         if(item.wIn      == null && st.defaultWIn      != null) item.wIn      = st.defaultWIn;
         if(item.hIn      == null && st.defaultHIn      != null) item.hIn      = st.defaultHIn;
         if(item.heightIn == null && st.defaultHeightIn != null) item.heightIn = st.defaultHeightIn;
@@ -135,6 +137,7 @@ function migrateColorsAndDefaults(app){
           if(r.fillAlpha==null) r.fillAlpha=1;
           if(!Number.isFinite(Number(r.rotation))) r.rotation=normalizeRotation((s.types?.Room||{}).defaultRotation ?? 0); else r.rotation=normalizeRotation(r.rotation);
           r.locked=!!r.locked;
+          r.zIndex=Number.isFinite(Number(r.zIndex)) ? Math.trunc(Number(r.zIndex)) : getDefaultZIndexForType("Room");
           for(const it of r.items||[]){
             if(typeof it.fillColor==="string"){
               const m=it.fillColor.match(/^rgba\((\d+),(\d+),(\d+),([0-9.]+)\)$/i);
@@ -144,6 +147,7 @@ function migrateColorsAndDefaults(app){
             const td=s.types?.[it.type]||{};
             if(!Number.isFinite(Number(it.rotation))) it.rotation=normalizeRotation(td.defaultRotation ?? 0); else it.rotation=normalizeRotation(it.rotation);
             it.locked=!!it.locked;
+            it.zIndex=Number.isFinite(Number(it.zIndex)) ? Math.trunc(Number(it.zIndex)) : getDefaultZIndexForType(it.type);
           }
         }
       }
