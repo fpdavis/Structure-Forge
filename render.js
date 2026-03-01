@@ -90,7 +90,7 @@ function getSingleSelectionAbsRect(floor){
 }
 
 function drawRulerCanvas(canvas, opts){
-  const {widthPx,heightPx,bounds,metrics,floatingScale,highlightRect}=opts;
+  const {widthPx,heightPx,bounds,metrics,floatingScale,highlightRect,contentOriginX=0,contentOriginY=0}=opts;
   const ctx=canvas.getContext("2d");
   canvas.width=Math.max(1,Math.round(widthPx));
   canvas.height=Math.max(1,Math.round(heightPx));
@@ -105,12 +105,12 @@ function drawRulerCanvas(canvas, opts){
   ctx.stroke();
 
   const scale=floatingScale||1;
-  const xStart=RULER_THICKNESS + metrics.x0Minor*scale;
-  const yStart=RULER_THICKNESS + metrics.y0Minor*scale;
+  const xStart=RULER_THICKNESS + contentOriginX + metrics.x0Minor*scale;
+  const yStart=RULER_THICKNESS + contentOriginY + metrics.y0Minor*scale;
   const minorStep=metrics.minorStepPx*scale;
   const majorStep=metrics.majorStepPx*scale;
-  const xMajorStart=RULER_THICKNESS + metrics.x0Major*scale;
-  const yMajorStart=RULER_THICKNESS + metrics.y0Major*scale;
+  const xMajorStart=RULER_THICKNESS + contentOriginX + metrics.x0Major*scale;
+  const yMajorStart=RULER_THICKNESS + contentOriginY + metrics.y0Major*scale;
 
   ctx.font=`${RULER_FONT_SIZE}px system-ui`;
   ctx.fillStyle=RULER_TEXT_COLOR;
@@ -121,7 +121,7 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(x, RULER_THICKNESS); ctx.lineTo(x, tick); ctx.stroke();
     if(isMajor){
-      const valPx=(x-RULER_THICKNESS)/scale;
+      const valPx=((x-RULER_THICKNESS-contentOriginX)/scale)-metrics.x0Major;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.fillText(String(valIn), x+2, 10);
     }
@@ -132,20 +132,20 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(RULER_THICKNESS, y); ctx.lineTo(tick, y); ctx.stroke();
     if(isMajor){
-      const valPx=(y-RULER_THICKNESS)/scale;
+      const valPx=((y-RULER_THICKNESS-contentOriginY)/scale)-metrics.y0Major;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.save();
-      ctx.translate(10,y-2); ctx.rotate(-Math.PI/2);
+      ctx.translate(12,y-2); ctx.rotate(-Math.PI/2);
       ctx.fillText(String(valIn),0,0);
       ctx.restore();
     }
   }
 
   if(highlightRect){
-    const x1=RULER_THICKNESS+inToPx((highlightRect.x+(bounds.offsetXIn||0)))*scale;
-    const y1=RULER_THICKNESS+inToPx((highlightRect.y+(bounds.offsetYIn||0)))*scale;
-    const x2=RULER_THICKNESS+inToPx((highlightRect.x+highlightRect.w+(bounds.offsetXIn||0)))*scale;
-    const y2=RULER_THICKNESS+inToPx((highlightRect.y+highlightRect.h+(bounds.offsetYIn||0)))*scale;
+    const x1=RULER_THICKNESS+contentOriginX+inToPx((highlightRect.x+(bounds.offsetXIn||0)))*scale;
+    const y1=RULER_THICKNESS+contentOriginY+inToPx((highlightRect.y+(bounds.offsetYIn||0)))*scale;
+    const x2=RULER_THICKNESS+contentOriginX+inToPx((highlightRect.x+highlightRect.w+(bounds.offsetXIn||0)))*scale;
+    const y2=RULER_THICKNESS+contentOriginY+inToPx((highlightRect.y+highlightRect.h+(bounds.offsetYIn||0)))*scale;
     ctx.strokeStyle=RULER_HIGHLIGHT_LINE_COLOR;
     ctx.lineWidth=RULER_HIGHLIGHT_LINE_WIDTH;
     ctx.setLineDash([5,4]);
@@ -244,7 +244,7 @@ function render(){
   const vpWidthPx=inToPx(viewport.width);
   const vpHeightPx=inToPx(viewport.height);
 
-  const floatingRulers=[];
+  const floatingRulerContexts=[];
   for(const floor of HOUSE.floors){
     if(!state.visibleFloors.has(floor.id)) continue;
     const bounds=computeFloorBoundsIn(floor);
@@ -549,7 +549,7 @@ function render(){
           rulerCanvas.dataset.floatingFloor=floor.id;
           rulerCanvas.style.position="absolute";
           rulerCanvas.style.zIndex="8";
-          floatingRulers.push({rulerCanvas,svg,bounds,metrics,highlightRect});
+          floatingRulerContexts.push({floorId:floor.id,svg,bounds,metrics,highlightRect});
         }
       }
     }
@@ -557,19 +557,25 @@ function render(){
   }
   wrap.appendChild(inner);
 
-  if(floatingRulers.length){
+  if(state.view.showRuler && state.view.rulerMode==="floating" && floatingRulerContexts.length){
+    const selectedFloorId=state.selected?.floorId || (state.selected?.kind==="room" ? findRoom(state.selected.roomId)?.floor?.id : null) || (state.selected?.kind==="item" ? findItem(state.selected.itemId)?.floor?.id : null);
+    const chosen=floatingRulerContexts.find((fr)=>fr.floorId===selectedFloorId) || floatingRulerContexts[0];
     const wrapRect=wrap.getBoundingClientRect();
-    for(const fr of floatingRulers){
-      const rect=fr.svg.getBoundingClientRect();
-      const left=rect.left-wrapRect.left;
-      const top=rect.top-wrapRect.top;
-      fr.rulerCanvas.style.left=`${left}px`;
-      fr.rulerCanvas.style.top=`${top}px`;
-      fr.rulerCanvas.style.width=`${rect.width}px`;
-      fr.rulerCanvas.style.height=`${rect.height}px`;
-      drawRulerCanvas(fr.rulerCanvas,{widthPx:rect.width,heightPx:rect.height,bounds:fr.bounds,metrics:fr.metrics,floatingScale:state.view.scale,highlightRect:fr.highlightRect});
-      wrap.appendChild(fr.rulerCanvas);
-    }
+    const rect=chosen.svg.getBoundingClientRect();
+    const contentOriginX=rect.left-wrapRect.left;
+    const contentOriginY=rect.top-wrapRect.top;
+
+    const rulerCanvas=document.createElement("canvas");
+    rulerCanvas.className="rulerCanvas";
+    rulerCanvas.style.pointerEvents="none";
+    rulerCanvas.style.position="absolute";
+    rulerCanvas.style.left="0";
+    rulerCanvas.style.top="0";
+    rulerCanvas.style.zIndex="8";
+    rulerCanvas.style.width=`${wrap.clientWidth}px`;
+    rulerCanvas.style.height=`${wrap.clientHeight}px`;
+    drawRulerCanvas(rulerCanvas,{widthPx:wrap.clientWidth,heightPx:wrap.clientHeight,bounds:chosen.bounds,metrics:chosen.metrics,floatingScale:state.view.scale,highlightRect:chosen.highlightRect,contentOriginX,contentOriginY});
+    wrap.appendChild(rulerCanvas);
   }
 
   updateFloorSummary();
