@@ -121,7 +121,7 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(x, RULER_THICKNESS); ctx.lineTo(x, tick); ctx.stroke();
     if(isMajor){
-      const valPx=(x-RULER_THICKNESS-xMajorStart+metrics.x0Major*scale)/scale;
+      const valPx=(x-xMajorStart)/scale;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.fillText(String(valIn), x+2, 10);
     }
@@ -132,7 +132,7 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(RULER_THICKNESS, y); ctx.lineTo(tick, y); ctx.stroke();
     if(isMajor){
-      const valPx=(y-RULER_THICKNESS-yMajorStart+metrics.y0Major*scale)/scale;
+      const valPx=(y-yMajorStart)/scale;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.save();
       ctx.translate(2,y-2); ctx.rotate(-Math.PI/2);
