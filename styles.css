@@ -126,3 +126,20 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
 
 .sf-lassoBox{position:fixed;z-index:9998;border:1px dashed var(--accent);background:rgba(106,166,255,.12);pointer-events:none}
 #selForm input:disabled,#selForm textarea:disabled,#selForm select:disabled{opacity:.55;cursor:not-allowed}
+
+
+@media (prefers-color-scheme: light){
+  :root{--bg:#eef2f7;--panel:#f8fafc;--border:#d1d9e6;--text:#122033;--muted:#52627a;--accent:#2f6feb;--shadow:rgba(15,23,42,.14);--grid:#e6edf7;--canvas:#f2f6fc}
+  details.panel,.floorBlock,.field,.checkbox,.floorRow,.cfgBlock{background:rgba(255,255,255,.86)}
+  summary,.floorHeader{background:rgba(255,255,255,.7)}
+  .btn{background:rgba(255,255,255,.8)}
+  .btn:hover{border-color:rgba(18,32,51,.3)}
+  .field input,.field select,.field textarea{background:#fff;border-color:#c8d2e2;color:var(--text)}
+  .field select option,.field select optgroup{background:#fff;color:var(--text)}
+  svg.floorSvg{background:rgba(255,255,255,.92)}
+  .roomLabel,.itemLabel{stroke:rgba(255,255,255,.85)}
+  .helpPill{background:rgba(47,111,235,.08)}
+  .helpTinyMuted{color:#6b7280}
+  .sf-contextMenu{background:#ffffff;border-color:#c8d2e2;box-shadow:0 10px 25px rgba(15,23,42,.22)}
+  .sf-contextMenuItem:hover{background:rgba(47,111,235,.12)}
+}
