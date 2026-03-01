@@ -326,13 +326,16 @@ function applyDefaultsToObj(o){
   else o.zIndex=Math.trunc(Number(o.zIndex));
 }
 
-function getTypeDisplayOrderIndex(type){
-  const idx=ACTIVE.typeOrder.indexOf(type);
-  return idx>=0 ? idx : ACTIVE.typeOrder.length;
+function getTypeDisplayOrderIndex(type, structure=ACTIVE){
+  const typeOrder=Array.isArray(structure?.typeOrder)
+    ? structure.typeOrder
+    : ["Room", ...Object.keys(structure?.types||{}).filter(t=>t!=="Room")];
+  const idx=typeOrder.indexOf(type);
+  return idx>=0 ? idx : typeOrder.length;
 }
 
-function getDefaultZIndexForType(type){
-  return getTypeDisplayOrderIndex(type);
+function getDefaultZIndexForType(type, structure=ACTIVE){
+  return getTypeDisplayOrderIndex(type, structure);
 }
 
 function getFloorItems(floorId){
