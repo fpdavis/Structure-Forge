@@ -121,7 +121,7 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(x, RULER_THICKNESS); ctx.lineTo(x, tick); ctx.stroke();
     if(isMajor){
-      const valPx=(x-xMajorStart)/scale;
+      const valPx=(x-RULER_THICKNESS)/scale;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.fillText(String(valIn), x+2, 10);
     }
@@ -132,10 +132,10 @@ function drawRulerCanvas(canvas, opts){
     const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
     ctx.beginPath(); ctx.moveTo(RULER_THICKNESS, y); ctx.lineTo(tick, y); ctx.stroke();
     if(isMajor){
-      const valPx=(y-yMajorStart)/scale;
+      const valPx=(y-RULER_THICKNESS)/scale;
       const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
       ctx.save();
-      ctx.translate(2,y-2); ctx.rotate(-Math.PI/2);
+      ctx.translate(10,y-2); ctx.rotate(-Math.PI/2);
       ctx.fillText(String(valIn),0,0);
       ctx.restore();
     }
@@ -244,6 +244,7 @@ function render(){
   const vpWidthPx=inToPx(viewport.width);
   const vpHeightPx=inToPx(viewport.height);
 
+  const floatingRulers=[];
   for(const floor of HOUSE.floors){
     if(!state.visibleFloors.has(floor.id)) continue;
     const bounds=computeFloorBoundsIn(floor);
@@ -546,23 +547,30 @@ function render(){
           block.appendChild(rulerCanvas);
         } else {
           rulerCanvas.dataset.floatingFloor=floor.id;
-          drawRulerCanvas(rulerCanvas,{widthPx,heightPx,bounds,metrics,floatingScale:state.view.scale,highlightRect});
-          wrap.appendChild(rulerCanvas);
-          requestAnimationFrame(()=>{
-            const rect=svg.getBoundingClientRect();
-            const wrapRect=wrap.getBoundingClientRect();
-            rulerCanvas.style.position="absolute";
-            rulerCanvas.style.left=`${rect.left-wrapRect.left}px`;
-            rulerCanvas.style.top=`${rect.top-wrapRect.top}px`;
-            rulerCanvas.style.width=`${rect.width}px`;
-            rulerCanvas.style.height=`${rect.height}px`;
-            drawRulerCanvas(rulerCanvas,{widthPx:rect.width,heightPx:rect.height,bounds,metrics,floatingScale:state.view.scale,highlightRect});
-          });
+          rulerCanvas.style.position="absolute";
+          rulerCanvas.style.zIndex="8";
+          floatingRulers.push({rulerCanvas,svg,bounds,metrics,highlightRect});
         }
       }
     }
     inner.appendChild(block);
   }
   wrap.appendChild(inner);
+
+  if(floatingRulers.length){
+    const wrapRect=wrap.getBoundingClientRect();
+    for(const fr of floatingRulers){
+      const rect=fr.svg.getBoundingClientRect();
+      const left=rect.left-wrapRect.left;
+      const top=rect.top-wrapRect.top;
+      fr.rulerCanvas.style.left=`${left}px`;
+      fr.rulerCanvas.style.top=`${top}px`;
+      fr.rulerCanvas.style.width=`${rect.width}px`;
+      fr.rulerCanvas.style.height=`${rect.height}px`;
+      drawRulerCanvas(fr.rulerCanvas,{widthPx:rect.width,heightPx:rect.height,bounds:fr.bounds,metrics:fr.metrics,floatingScale:state.view.scale,highlightRect:fr.highlightRect});
+      wrap.appendChild(fr.rulerCanvas);
+    }
+  }
+
   updateFloorSummary();
 }
