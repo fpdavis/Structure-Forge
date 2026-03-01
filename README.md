@@ -58,20 +58,12 @@ UI sections include:
   - Align internal code variable naming where low-risk (`HOUSE`/`house` vs `structure` terminology)
   - Add a README sidebar panel reference table (panel name, purpose, key actions, primary data affected)
   - Update exporter/docs language so data model and UI references match glossary terms
-  - Add a bug-report reference convention in docs (example: `[Sidebar > Configuration] Door default width not applied`)
-- **Additional keyboard shortcuts**    
-  - Layer Order:
-    - Bring Forward: Ctrl + ]
-    - Send Backward: Ctrl + [  
+  - Add a bug-report reference convention in docs (example: `[Sidebar > Configuration] Door default width not applied`)   
 - Rulers along X/Y axis
  
 ### Interaction + UX improvements (medium)
 - Floor-level lock
-- **Context menu (right-click)**
-  - Bring front/back
-- **User selectable units**
-  - input conversions
-- Theme toggle (dark/light) with persisted setting
+- input conversions
 - Layout polish
 - Rotate items within rotated rooms
 
