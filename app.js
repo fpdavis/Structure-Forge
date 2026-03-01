@@ -322,6 +322,81 @@ function applyDefaultsToObj(o){
   if(!Number.isFinite(Number(o.rotation))) o.rotation=normalizeRotation(st.defaultRotation ?? 0);
   else o.rotation=normalizeRotation(o.rotation);
   o.locked=!!o.locked;
+  if(!Number.isFinite(Number(o.zIndex))) o.zIndex=getDefaultZIndexForType(o.type);
+  else o.zIndex=Math.trunc(Number(o.zIndex));
+}
+
+function getTypeDisplayOrderIndex(type){
+  const idx=ACTIVE.typeOrder.indexOf(type);
+  return idx>=0 ? idx : ACTIVE.typeOrder.length;
+}
+
+function getDefaultZIndexForType(type){
+  return getTypeDisplayOrderIndex(type);
+}
+
+function getFloorItems(floorId){
+  const floor=findFloor(floorId);
+  if(!floor) return [];
+  const out=[];
+  for(const room of floor.rooms||[]){
+    for(const item of room.items||[]) out.push(item);
+  }
+  return out;
+}
+
+function adjustSelectedZIndex(mode){
+  if(!state.selected) return false;
+  if(state.selected.kind==="room"){
+    const res=findRoom(state.selected.roomId); if(!res||res.room.locked) return false;
+    const room=res.room;
+    if(mode==="forward") room.zIndex+=1;
+    else if(mode==="backward") room.zIndex-=1;
+    else if(mode==="front"){
+      const peers=(res.floor.rooms||[]).map(r=>Number(r.zIndex)||0);
+      room.zIndex=(peers.length?Math.max(...peers):0)+1;
+    } else if(mode==="back"){
+      const peers=(res.floor.rooms||[]).map(r=>Number(r.zIndex)||0);
+      room.zIndex=(peers.length?Math.min(...peers):0)-1;
+    } else return false;
+    buildSelectedForm();
+    render();
+    markDirty();
+    pushHistory();
+    return true;
+  }
+
+  const ids=getSelectedItemIds();
+  if(!ids.length) return false;
+  const selectedItems=[];
+  let floorId=null;
+  for(const id of ids){
+    const res=findItem(id);
+    if(!res||res.item.locked) continue;
+    floorId=floorId||res.floor.id;
+    if(res.floor.id!==floorId) continue;
+    selectedItems.push(res.item);
+  }
+  if(!selectedItems.length||!floorId) return false;
+
+  if(mode==="forward"||mode==="backward"){
+    const delta=mode==="forward" ? 1 : -1;
+    for(const item of selectedItems) item.zIndex+=delta;
+  } else if(mode==="front"||mode==="back"){
+    const peers=getFloorItems(floorId);
+    const values=peers.map(i=>Number(i.zIndex)||0);
+    const target=mode==="front"
+      ? (values.length?Math.max(...values):0)+1
+      : (values.length?Math.min(...values):0)-1;
+    for(const item of selectedItems) item.zIndex=target;
+  } else {
+    return false;
+  }
+  buildSelectedForm();
+  render();
+  markDirty();
+  pushHistory();
+  return true;
 }
 function ensureTypeExists(type){
   if(ACTIVE.types[type]){

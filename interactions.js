@@ -31,6 +31,10 @@ function showContextMenu(clientX, clientY){
     if(hasGroupedSelectedItem) mk("Ungroup",()=>ungroupSelectedItems());
   }
   mk("Delete",()=>deleteSelected());
+  mk("Bring Forward",()=>adjustSelectedZIndex("forward"));
+  mk("Send Backward",()=>adjustSelectedZIndex("backward"));
+  mk("Bring to Front",()=>adjustSelectedZIndex("front"));
+  mk("Send to Back",()=>adjustSelectedZIndex("back"));
   mk(obj.locked?"Unlock":"Lock",()=>toggleSelectedLock());
   menu.style.left=`${Math.max(8,clientX)}px`;
   menu.style.top=`${Math.max(8,clientY)}px`;
@@ -310,6 +314,12 @@ function wire(){
       return;
     }
 	
+    // ── Z-index shortcuts ───────────────────────────────────────────────
+    if(ev.altKey && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey){
+      if(ev.key==="]"){ ev.preventDefault(); adjustSelectedZIndex("forward"); return; }
+      if(ev.key==="["){ ev.preventDefault(); adjustSelectedZIndex("backward"); return; }
+    }
+
     // ── Delete / Insert ───────────────────────────────────────────────────
     if(ev.key==="Delete"){ ev.preventDefault(); deleteSelected(); return; }
     if(ev.key==="Insert"){ ev.preventDefault(); duplicateSelected(); return; }
