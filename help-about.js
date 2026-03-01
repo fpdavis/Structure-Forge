@@ -167,6 +167,10 @@ const HELP_ABOUT_TEMPLATE = `
         <span class="helpMutedSm">Group / ungroup selected items</span>
       </div>
       <div class="helpRow">
+        <span class="helpPill">Alt+[ / Alt+]</span>
+        <span class="helpMutedSm">Send selected object backward / forward in z-order</span>
+      </div>
+      <div class="helpRow">
         <span class="helpPill">Esc</span>
         <span class="helpMutedSm">Clear selection or abort drag</span>
       </div>
@@ -188,12 +192,13 @@ const HELP_ABOUT_TEMPLATE = `
       <div>📏 &nbsp;Measurements in inches; adjustable scale</div>
       <div>🔢 &nbsp;Selectable units: inches, ft/in, metric</div>
       <div>🔄 &nbsp;Rotate items and rooms</div>
+      <div>🧱 &nbsp;Per-object z-index controls for rooms and items</div>
       <div>📐 &nbsp;Area &amp; perimeter calculations per room/floor</div>
       <div>📏 &nbsp;Canvas rulers and optional snap grid</div>
       <div>🔒 &nbsp;Lock objects to prevent accidental edits</div>
       <div>🧲 &nbsp;Multi-select with additive click + lasso (Ctrl-click ignores group expansion)</div>
       <div>🎨 &nbsp;Per-type default colors &amp; dimensions</div>
-      <div>🌓 &nbsp;Dark / light theme toggle</div>
+      <div>🌓 &nbsp;Automatic dark / light theme from system preference</div>
       <div>💾 &nbsp;Autosave to browser storage</div>
       <div>↕️ &nbsp;Drag &amp; drop items between rooms</div>
       <div>🧩 &nbsp;Item grouping with selective group/ungroup actions</div>
@@ -209,7 +214,8 @@ const HELP_ABOUT_TEMPLATE = `
     <div class="helpSectionTitle">💡 Tips</div>
     <div class="helpCol5 helpMutedSm">
       <div>• <strong class="helpStrong">Add New Item</strong> pre-populates floor &amp; room from your last canvas click.</div>
-      <div>• <strong class="helpStrong">Z-order</strong> is type-based. Use ↑↓ arrows in Element Visibility to layer types.</div>
+      <div>• <strong class="helpStrong">Z-index</strong> can be set directly per room or item in the Selected panel.</div>
+      <div>• Use <strong class="helpStrong">Alt+[</strong> and <strong class="helpStrong">Alt+]</strong> to move selected objects backward/forward in z-order.</div>
       <div>• <strong class="helpStrong">Fill Opacity</strong> steps in increments of 0.1 (0 = transparent, 1 = solid).</div>
       <div>• <strong class="helpStrong">Export formats:</strong> JSON (canonical), Text, SVG, DXF, LOGO (turtle).</div>
     </div>
