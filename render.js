@@ -1,8 +1,10 @@
+const FLOOR_VIEW_PADDING_IN = 0;
+
 function computeFloorBoundsIn(floor){
   // Bounds are used for rendering the SVG viewport. Keep a consistent padding
   // around the structure, but do NOT let absolute placement offsets inflate
   // the displayed width/height in the floor title bar.
-  const padIn=20;
+  const padIn=FLOOR_VIEW_PADDING_IN;
   let minX=0, minY=0, maxX=0, maxY=0;
   let has=false;
   for(const r of (floor.rooms||[])){
@@ -31,7 +33,7 @@ function computeFloorBoundsIn(floor){
 }
 
 function computeHouseViewportIn(floors){
-  const padIn=20;
+  const padIn=FLOOR_VIEW_PADDING_IN;
   let maxSpanW=0, maxSpanH=0;
   for(const f of (floors||[])){
     const b=computeFloorBoundsIn(f);
@@ -133,6 +135,108 @@ function buildGridGroup(widthPx,heightPx,oxIn,oyIn){
   return g;
 }
 
+
+const RULER_THICKNESS = 32;
+const RULER_BACKGROUND_COLOR = "#141924";
+const RULER_MAJOR_TICK_COLOR = "#e7eaf0";
+const RULER_MINOR_TICK_COLOR = "#8a93a7";
+const RULER_FONT_SIZE = 12;
+const RULER_TEXT_COLOR = "#e7eaf0";
+const RULER_HIGHLIGHT_LINE_COLOR = "#7fc4ff";
+const RULER_HIGHLIGHT_LINE_WIDTH = 1.5;
+
+function getSingleSelectionRulerGuides(floorId, fx, fy){
+  if(!state.view.showRuler || !state.view.showRulerHighlight || !state.selected) return null;
+  if(state.selected.kind==="item"){
+    if(Array.isArray(state.selected.itemIds) && state.selected.itemIds.length>1) return null;
+    const sel=findItem(state.selected.itemId);
+    if(!sel || sel.floor.id!==floorId) return null;
+    const abs=itemAbsRect(sel.item, sel.room);
+    return {
+      xStart:fx(abs.xIn), xEnd:fx(abs.xIn+abs.wIn),
+      yStart:fy(abs.yIn), yEnd:fy(abs.yIn+abs.hIn)
+    };
+  }
+  if(state.selected.kind==="room"){
+    const sel=findRoom(state.selected.roomId);
+    if(!sel || sel.floor.id!==floorId) return null;
+    const rr=normalizeRectAbs(sel.room);
+    return {
+      xStart:fx(rr.xIn), xEnd:fx(rr.xIn+rr.wIn),
+      yStart:fy(rr.yIn), yEnd:fy(rr.yIn+rr.hIn)
+    };
+  }
+  return null;
+}
+
+function buildRulerGroup(contentWidthPx, contentHeightPx, oxIn, oyIn, guides=null){
+  const minorIn=Number(state.grid.minorStep||0);
+  if(!(minorIn>0)) return null;
+  const majorMul=gridMajorMultiple(minorIn);
+  const majorIn=minorIn*majorMul;
+  const minorStepPx=inToPx(minorIn);
+  const majorStepPx=inToPx(majorIn);
+  if(!(minorStepPx>0) || !(majorStepPx>0)) return null;
+
+  const oxPx=inToPx(oxIn||0);
+  const oyPx=inToPx(oyIn||0);
+  const x0Minor=((oxPx%minorStepPx)+minorStepPx)%minorStepPx;
+  const y0Minor=((oyPx%minorStepPx)+minorStepPx)%minorStepPx;
+  const x0Major=((oxPx%majorStepPx)+majorStepPx)%majorStepPx;
+  const y0Major=((oyPx%majorStepPx)+majorStepPx)%majorStepPx;
+
+  const ns="http://www.w3.org/2000/svg";
+  const g=document.createElementNS(ns,"g");
+  g.setAttribute("class","rulerLayer");
+
+  const mkRect=(x,y,w,h,fill)=>{ const el=document.createElementNS(ns,"rect"); el.setAttribute("x",x); el.setAttribute("y",y); el.setAttribute("width",w); el.setAttribute("height",h); el.setAttribute("fill",fill); return el; };
+  const mkLine=(x1,y1,x2,y2,color,w=1)=>{ const el=document.createElementNS(ns,"line"); el.setAttribute("x1",x1); el.setAttribute("y1",y1); el.setAttribute("x2",x2); el.setAttribute("y2",y2); el.setAttribute("stroke",color); el.setAttribute("stroke-width",w); return el; };
+
+  g.appendChild(mkRect(RULER_THICKNESS,0,contentWidthPx,RULER_THICKNESS,RULER_BACKGROUND_COLOR));
+  g.appendChild(mkRect(0,RULER_THICKNESS,RULER_THICKNESS,contentHeightPx,RULER_BACKGROUND_COLOR));
+  g.appendChild(mkRect(0,0,RULER_THICKNESS,RULER_THICKNESS,RULER_BACKGROUND_COLOR));
+
+  for(let x=x0Minor; x<=contentWidthPx+0.001; x+=minorStepPx){
+    const isMajor=Math.abs(((x-x0Major)%majorStepPx+majorStepPx)%majorStepPx)<0.001;
+    const h=isMajor ? RULER_THICKNESS-3 : Math.round(RULER_THICKNESS*0.45);
+    g.appendChild(mkLine(RULER_THICKNESS+x,RULER_THICKNESS-h,RULER_THICKNESS+x,RULER_THICKNESS,isMajor?RULER_MAJOR_TICK_COLOR:RULER_MINOR_TICK_COLOR,1));
+    if(isMajor){
+      const t=document.createElementNS(ns,"text");
+      t.setAttribute("x",RULER_THICKNESS+x+2);
+      t.setAttribute("y",RULER_FONT_SIZE+2);
+      t.setAttribute("fill",RULER_TEXT_COLOR);
+      t.setAttribute("font-size",String(RULER_FONT_SIZE));
+      t.textContent=String(Math.round(((x-x0Minor)/minorStepPx)*minorIn));
+      g.appendChild(t);
+    }
+  }
+
+  for(let y=y0Minor; y<=contentHeightPx+0.001; y+=minorStepPx){
+    const isMajor=Math.abs(((y-y0Major)%majorStepPx+majorStepPx)%majorStepPx)<0.001;
+    const w=isMajor ? RULER_THICKNESS-3 : Math.round(RULER_THICKNESS*0.45);
+    g.appendChild(mkLine(RULER_THICKNESS-w,RULER_THICKNESS+y,RULER_THICKNESS,RULER_THICKNESS+y,isMajor?RULER_MAJOR_TICK_COLOR:RULER_MINOR_TICK_COLOR,1));
+    if(isMajor){
+      const label=String(Math.round(((y-y0Minor)/minorStepPx)*minorIn));
+      const t=document.createElementNS(ns,"text");
+      const tx=RULER_FONT_SIZE+2;
+      const ty=RULER_THICKNESS+y-2;
+      t.setAttribute("x",String(tx));
+      t.setAttribute("y",String(ty));
+      t.setAttribute("fill",RULER_TEXT_COLOR);
+      t.setAttribute("font-size",String(RULER_FONT_SIZE));
+      t.setAttribute("transform",`rotate(-90 ${tx} ${ty})`);
+      t.textContent=label;
+      g.appendChild(t);
+    }
+  }
+
+  if(guides){
+    for(const x of [guides.xStart, guides.xEnd]) g.appendChild(mkLine(RULER_THICKNESS+x,RULER_THICKNESS,RULER_THICKNESS+x,RULER_THICKNESS+contentHeightPx,RULER_HIGHLIGHT_LINE_COLOR,RULER_HIGHLIGHT_LINE_WIDTH));
+    for(const y of [guides.yStart, guides.yEnd]) g.appendChild(mkLine(RULER_THICKNESS,RULER_THICKNESS+y,RULER_THICKNESS+contentWidthPx,RULER_THICKNESS+y,RULER_HIGHLIGHT_LINE_COLOR,RULER_HIGHLIGHT_LINE_WIDTH));
+  }
+  return g;
+}
+
 function render(){
   renderCounts();
   const wrap=document.getElementById("canvasWrap");
@@ -151,7 +255,10 @@ function render(){
     const ox=bounds.offsetXIn||0, oy=bounds.offsetYIn||0;
     const fx=(xIn)=>inToPx((xIn||0)+ox);
     const fy=(yIn)=>inToPx((yIn||0)+oy);
-    const widthPx=vpWidthPx, heightPx=vpHeightPx;
+    const contentWidthPx=vpWidthPx, contentHeightPx=vpHeightPx;
+    const rulerEnabled=!!state.view.showRuler;
+    const widthPx=contentWidthPx + (rulerEnabled ? RULER_THICKNESS : 0);
+    const heightPx=contentHeightPx + (rulerEnabled ? RULER_THICKNESS : 0);
 
     const block=document.createElement("div"); block.className="floorBlock";
     const header=document.createElement("div"); header.className="floorHeader";
@@ -164,9 +271,13 @@ function render(){
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
 
+    const contentLayer=document.createElementNS("http://www.w3.org/2000/svg","g");
+    if(rulerEnabled) contentLayer.setAttribute("transform",`translate(${RULER_THICKNESS} ${RULER_THICKNESS})`);
+    svg.appendChild(contentLayer);
+
     // Grid (configurable layer)
-    const gridGroup = state.grid.mode==="off" ? null : buildGridGroup(widthPx,heightPx,ox,oy);
-    if(gridGroup && state.grid.mode==="under") svg.appendChild(gridGroup);
+    const gridGroup = state.grid.mode==="off" ? null : buildGridGroup(contentWidthPx,contentHeightPx,ox,oy);
+    if(gridGroup && state.grid.mode==="under") contentLayer.appendChild(gridGroup);
     // Label group — appended last so labels always render above all objects
     const labelGroup=document.createElementNS("http://www.w3.org/2000/svg","g");
     labelGroup.setAttribute("class","labelLayer");
@@ -282,7 +393,7 @@ function render(){
         t.appendChild(t1); t.appendChild(t2);
         labelGroup.appendChild(t);
       }
-      svg.appendChild(g);
+      contentLayer.appendChild(g)
     }
 
     // Other types
@@ -419,12 +530,17 @@ function render(){
             t.appendChild(t1); t.appendChild(t2);
             labelGroup.appendChild(t);
           }
-          svg.appendChild(g);
+          contentLayer.appendChild(g)
     }
 
-    if(gridGroup && state.grid.mode==="over") svg.appendChild(gridGroup);
+    if(gridGroup && state.grid.mode==="over") contentLayer.appendChild(gridGroup);
+    const guides=getSingleSelectionRulerGuides(floor.id,fx,fy);
+    if(rulerEnabled){
+      const rulerGroup=buildRulerGroup(contentWidthPx,contentHeightPx,ox,oy,guides);
+      if(rulerGroup) svg.appendChild(rulerGroup);
+    }
     svg.addEventListener("click",()=>{ if(!lasso.active) setSelected(null); });
-    svg.appendChild(labelGroup);
+    contentLayer.appendChild(labelGroup);
     block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
   }
   wrap.appendChild(inner);

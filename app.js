@@ -30,7 +30,7 @@ const state={
   visibleLabels:{},
   selected:null,
   selectedSnapshot:null,
-  view:{scale:1,tx:0,ty:0}
+  view:{scale:1,tx:0,ty:0,showRuler:false,showRulerHighlight:true}
 };
 const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false, skipClickSelect:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
@@ -151,7 +151,9 @@ function _snapshotViewConfiguration(){
     majorColor: String(state.grid.majorColor||"#ffffff"),
     minorOpacity: Number(state.grid.minorOpacity),
     majorOpacity: Number(state.grid.majorOpacity),
-    snapEnabled: !!state.grid.snapEnabled
+    snapEnabled: !!state.grid.snapEnabled,
+    showRuler: !!state.view.showRuler,
+    showRulerHighlight: !!state.view.showRulerHighlight
   };
 }
 
@@ -173,6 +175,8 @@ function _applyViewConfiguration(cfg){
   if(Number.isFinite(cfg.minorOpacity)) state.grid.minorOpacity=clamp(Number(cfg.minorOpacity),0,1);
   if(Number.isFinite(cfg.majorOpacity)) state.grid.majorOpacity=clamp(Number(cfg.majorOpacity),0,1);
   if(cfg.snapEnabled!=null) state.grid.snapEnabled=!!cfg.snapEnabled;
+  state.view.showRuler = cfg.showRuler!=null ? !!cfg.showRuler : false;
+  state.view.showRulerHighlight = cfg.showRulerHighlight!=null ? !!cfg.showRulerHighlight : true;
 }
 
 function _applyViewConfigurationFromActive(){
@@ -1333,6 +1337,10 @@ function syncViewPanelUI(){
   if(gMajo) gMajo.value=String(state.grid.majorOpacity ?? DEFAULT_UI.grid.majorOpacity);
   const gsnap=document.getElementById("gridSnapEnabled");
   if(gsnap) gsnap.checked=!!state.grid.snapEnabled;
+  const showRuler=document.getElementById("showRuler");
+  if(showRuler) showRuler.checked=!!state.view.showRuler;
+  const showRulerHighlight=document.getElementById("showRulerHighlight");
+  if(showRulerHighlight) showRulerHighlight.checked=!!state.view.showRulerHighlight;
 }
 
 function cycleGridSize(dir){
@@ -1387,7 +1395,9 @@ async function initApp(forceSeed=false){
       majorColor: (ui.grid||{}).majorColor ?? DEFAULT_UI.grid.majorColor,
       minorOpacity: (ui.grid||{}).minorOpacity ?? DEFAULT_UI.grid.minorOpacity,
       majorOpacity: (ui.grid||{}).majorOpacity ?? DEFAULT_UI.grid.majorOpacity,
-      snapEnabled: (ui.grid||{}).snapEnabled ?? DEFAULT_UI.grid.snapEnabled
+      snapEnabled: (ui.grid||{}).snapEnabled ?? DEFAULT_UI.grid.snapEnabled,
+      showRuler: false,
+      showRulerHighlight: true
     };
   }
 

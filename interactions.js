@@ -138,6 +138,8 @@ function wire(){
   document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridSnapEnabled")?.addEventListener("change",(ev)=>{ state.grid.snapEnabled=!!ev.target.checked; _commitViewConfiguration(); });
   document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); _commitViewConfiguration(); });
+  document.getElementById("showRuler")?.addEventListener("change",(ev)=>{ state.view.showRuler=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  document.getElementById("showRulerHighlight")?.addEventListener("change",(ev)=>{ state.view.showRulerHighlight=!!ev.target.checked; render(); _commitViewConfiguration(); });
 
   document.getElementById("viewSaveDefault")?.addEventListener("click",(e)=>{e.preventDefault(); saveViewDefaults();});
   document.getElementById("viewLoadDefault")?.addEventListener("click",(e)=>{e.preventDefault(); loadViewDefaults();});
