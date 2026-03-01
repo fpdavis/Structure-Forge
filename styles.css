@@ -143,3 +143,5 @@ svg.floorSvg{display:block;width:100%;height:auto;background:rgba(0,0,0,.12)}
   .sf-contextMenu{background:#ffffff;border-color:#c8d2e2;box-shadow:0 10px 25px rgba(15,23,42,.22)}
   .sf-contextMenuItem:hover{background:rgba(47,111,235,.12)}
 }
+
+.rulerCanvas{z-index:4;pointer-events:none}

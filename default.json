@@ -11,7 +11,10 @@
     "minorColor": "#ffffff",
     "majorColor": "#ffffff",
     "minorOpacity": 0.18,
-    "majorOpacity": 0.4
+    "majorOpacity": 0.4,
+    "showRuler": true,
+    "rulerMode": "locked",
+    "showRulerHighlight": true
   },
   "structures": [
     {
@@ -27,7 +30,10 @@
         "minorColor": "#ffffff",
         "majorColor": "#ffffff",
         "minorOpacity": 0.18,
-        "majorOpacity": 0.4
+        "majorOpacity": 0.4,
+        "showRuler": true,
+        "rulerMode": "locked",
+        "showRulerHighlight": true
       },
       "house": {
         "floors": [
@@ -2746,7 +2752,12 @@
         "Shower",
         "Mirror",
         "Vanity"
-      ]
+      ],
+      "viewConfiguration": {
+        "showRuler": true,
+        "rulerMode": "locked",
+        "showRulerHighlight": true
+      }
     },
     {
       "id": "00000122",
@@ -3145,7 +3156,12 @@
         "Shower",
         "Mirror",
         "Vanity"
-      ]
+      ],
+      "viewConfiguration": {
+        "showRuler": true,
+        "rulerMode": "locked",
+        "showRulerHighlight": true
+      }
     }
   ]
 }

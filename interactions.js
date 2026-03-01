@@ -137,6 +137,9 @@ function wire(){
   document.getElementById("gridMinorOpacity")?.addEventListener("input",(ev)=>{ state.grid.minorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridSnapEnabled")?.addEventListener("change",(ev)=>{ state.grid.snapEnabled=!!ev.target.checked; _commitViewConfiguration(); });
+  document.getElementById("showRuler")?.addEventListener("change",(ev)=>{ state.view.showRuler=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  document.getElementById("rulerMode")?.addEventListener("change",(ev)=>{ state.view.rulerMode=(ev.target.value==="floating")?"floating":"locked"; render(); _commitViewConfiguration(); });
+  document.getElementById("showRulerHighlight")?.addEventListener("change",(ev)=>{ state.view.showRulerHighlight=!!ev.target.checked; render(); _commitViewConfiguration(); });
   document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); _commitViewConfiguration(); });
 
   document.getElementById("viewSaveDefault")?.addEventListener("click",(e)=>{e.preventDefault(); saveViewDefaults();});

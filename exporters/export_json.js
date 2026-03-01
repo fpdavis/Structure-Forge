@@ -80,8 +80,20 @@
     return out;
   }
 
+
+  function stripViewConfiguration(cfg){
+    if(!cfg) return cfg;
+    const out=Object.assign({}, cfg);
+    const defaults=(typeof DEFAULT_UI!=="undefined" && DEFAULT_UI.ruler) ? DEFAULT_UI.ruler : {show:true,mode:"locked",showHighlight:true};
+    if(out.showRuler===defaults.show) delete out.showRuler;
+    if(out.rulerMode===defaults.mode) delete out.rulerMode;
+    if(out.showRulerHighlight===defaults.showHighlight) delete out.showRulerHighlight;
+    return out;
+  }
+
   function stripStructure(struct, typeDefaults) {
     const s = Object.assign({}, struct);
+    if(s.viewConfiguration) s.viewConfiguration=stripViewConfiguration(s.viewConfiguration);
     s.types = normaliseTypes(s.types);
     if (s.house && s.house.floors) {
       s.house = Object.assign({}, s.house, {
@@ -127,7 +139,7 @@
         url: window.location.href,
         dateTime: new Date().toISOString(),
         schemaVersion: SCHEMA_VERSION,
-        defaultConfiguration: clone.defaultConfiguration || null,
+        defaultConfiguration: stripViewConfiguration(clone.defaultConfiguration || null),
         activeId: clone.activeId,
         structures: clone.structures.map(s => stripStructure(s, typeDefaults))
       };

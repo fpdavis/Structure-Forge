@@ -46,22 +46,120 @@ function computeHouseViewportIn(floors){
 }
 
 
-function buildGridGroup(widthPx,heightPx,oxIn,oyIn){
+const RULER_THICKNESS = 24;
+const RULER_BACKGROUND_COLOR = "#0f1622";
+const RULER_MAJOR_TICK_COLOR = "#c7d7ff";
+const RULER_MINOR_TICK_COLOR = "#6f819f";
+const RULER_FONT_SIZE = 10;
+const RULER_TEXT_COLOR = "#e7eaf0";
+const RULER_HIGHLIGHT_LINE_COLOR = "#7ec8ff";
+const RULER_HIGHLIGHT_LINE_WIDTH = 1.25;
+
+function computeGridMetrics(oxIn,oyIn){
   const minorIn=Number(state.grid.minorStep||0);
   if(!(minorIn>0)) return null;
   const majorMul=gridMajorMultiple(minorIn);
   const majorIn=minorIn*majorMul;
-
   const minorStepPx=inToPx(minorIn);
   const majorStepPx=inToPx(majorIn);
   if(!(minorStepPx>0) || !(majorStepPx>0)) return null;
-
   const oxPx=inToPx(oxIn||0);
   const oyPx=inToPx(oyIn||0);
   const x0Minor=((oxPx%minorStepPx)+minorStepPx)%minorStepPx;
   const y0Minor=((oyPx%minorStepPx)+minorStepPx)%minorStepPx;
   const x0Major=((oxPx%majorStepPx)+majorStepPx)%majorStepPx;
   const y0Major=((oyPx%majorStepPx)+majorStepPx)%majorStepPx;
+  return {minorIn,majorIn,majorMul,minorStepPx,majorStepPx,x0Minor,y0Minor,x0Major,y0Major};
+}
+
+function getSingleSelectionAbsRect(floor){
+  const selectedIds=getSelectedItemIds ? getSelectedItemIds() : [];
+  if(selectedIds.length===1){
+    const ctx=findItem(selectedIds[0]);
+    if(!ctx || ctx.floor.id!==floor.id) return null;
+    const abs=itemAbsRect(ctx.item, ctx.room);
+    return {x:abs.xIn,y:abs.yIn,w:abs.wIn,h:abs.hIn};
+  }
+  if(state.selected?.kind==="room"){
+    const ctx=findRoom(state.selected.roomId);
+    if(!ctx || ctx.floor.id!==floor.id) return null;
+    const rr=normalizeRectAbs(ctx.room);
+    return {x:rr.xIn,y:rr.yIn,w:rr.wIn,h:rr.hIn};
+  }
+  return null;
+}
+
+function drawRulerCanvas(canvas, opts){
+  const {widthPx,heightPx,bounds,metrics,floatingScale,highlightRect}=opts;
+  const ctx=canvas.getContext("2d");
+  canvas.width=Math.max(1,Math.round(widthPx));
+  canvas.height=Math.max(1,Math.round(heightPx));
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=RULER_BACKGROUND_COLOR;
+  ctx.fillRect(0,0,canvas.width,RULER_THICKNESS);
+  ctx.fillRect(0,0,RULER_THICKNESS,canvas.height);
+  ctx.strokeStyle="rgba(255,255,255,0.2)";
+  ctx.beginPath();
+  ctx.moveTo(RULER_THICKNESS,0.5); ctx.lineTo(canvas.width,0.5);
+  ctx.moveTo(0.5,RULER_THICKNESS); ctx.lineTo(0.5,canvas.height);
+  ctx.stroke();
+
+  const scale=floatingScale||1;
+  const xStart=RULER_THICKNESS + metrics.x0Minor*scale;
+  const yStart=RULER_THICKNESS + metrics.y0Minor*scale;
+  const minorStep=metrics.minorStepPx*scale;
+  const majorStep=metrics.majorStepPx*scale;
+  const xMajorStart=RULER_THICKNESS + metrics.x0Major*scale;
+  const yMajorStart=RULER_THICKNESS + metrics.y0Major*scale;
+
+  ctx.font=`${RULER_FONT_SIZE}px system-ui`;
+  ctx.fillStyle=RULER_TEXT_COLOR;
+
+  for(let x=xStart; x<=canvas.width+0.5; x+=minorStep){
+    const isMajor=Math.abs(((x-xMajorStart)%majorStep+majorStep)%majorStep) < 0.75;
+    ctx.strokeStyle=isMajor?RULER_MAJOR_TICK_COLOR:RULER_MINOR_TICK_COLOR;
+    const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
+    ctx.beginPath(); ctx.moveTo(x, RULER_THICKNESS); ctx.lineTo(x, tick); ctx.stroke();
+    if(isMajor){
+      const valPx=(x-RULER_THICKNESS-xMajorStart+metrics.x0Major*scale)/scale;
+      const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
+      ctx.fillText(String(valIn), x+2, 10);
+    }
+  }
+  for(let y=yStart; y<=canvas.height+0.5; y+=minorStep){
+    const isMajor=Math.abs(((y-yMajorStart)%majorStep+majorStep)%majorStep) < 0.75;
+    ctx.strokeStyle=isMajor?RULER_MAJOR_TICK_COLOR:RULER_MINOR_TICK_COLOR;
+    const tick=isMajor?(RULER_THICKNESS-4):(RULER_THICKNESS-9);
+    ctx.beginPath(); ctx.moveTo(RULER_THICKNESS, y); ctx.lineTo(tick, y); ctx.stroke();
+    if(isMajor){
+      const valPx=(y-RULER_THICKNESS-yMajorStart+metrics.y0Major*scale)/scale;
+      const valIn=Math.max(0,Math.round(valPx/inToPx(1)));
+      ctx.save();
+      ctx.translate(2,y-2); ctx.rotate(-Math.PI/2);
+      ctx.fillText(String(valIn),0,0);
+      ctx.restore();
+    }
+  }
+
+  if(highlightRect){
+    const x1=RULER_THICKNESS+inToPx((highlightRect.x+(bounds.offsetXIn||0)))*scale;
+    const y1=RULER_THICKNESS+inToPx((highlightRect.y+(bounds.offsetYIn||0)))*scale;
+    const x2=RULER_THICKNESS+inToPx((highlightRect.x+highlightRect.w+(bounds.offsetXIn||0)))*scale;
+    const y2=RULER_THICKNESS+inToPx((highlightRect.y+highlightRect.h+(bounds.offsetYIn||0)))*scale;
+    ctx.strokeStyle=RULER_HIGHLIGHT_LINE_COLOR;
+    ctx.lineWidth=RULER_HIGHLIGHT_LINE_WIDTH;
+    ctx.setLineDash([5,4]);
+    for(const x of [x1,x2]){ ctx.beginPath(); ctx.moveTo(x,RULER_THICKNESS); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+    for(const y of [y1,y2]){ ctx.beginPath(); ctx.moveTo(RULER_THICKNESS,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.lineWidth=1;
+  }
+}
+
+function buildGridGroup(widthPx,heightPx,oxIn,oyIn){
+  const metrics=computeGridMetrics(oxIn,oyIn);
+  if(!metrics) return null;
+  const {minorStepPx,majorStepPx,x0Minor,y0Minor,x0Major,y0Major}=metrics;
 
   const g=document.createElementNS("http://www.w3.org/2000/svg","g");
   g.setAttribute("class","gridLayer");
@@ -137,6 +235,7 @@ function render(){
   renderCounts();
   const wrap=document.getElementById("canvasWrap");
   wrap.innerHTML="";
+  wrap.style.position="relative";
   const inner=document.createElement("div"); inner.id="canvasInner";
   inner.style.transform=`translate(${state.view.tx}px, ${state.view.ty}px) scale(${state.view.scale})`;
   inner.style.transformOrigin="0 0";
@@ -163,6 +262,9 @@ function render(){
     svg.dataset.floorId=floor.id;
     svg.setAttribute("viewBox",`0 0 ${widthPx} ${heightPx}`);
     svg.setAttribute("width",widthPx); svg.setAttribute("height",heightPx);
+    svg.style.display="block";
+
+    block.style.position="relative";
 
     // Grid (configurable layer)
     const gridGroup = state.grid.mode==="off" ? null : buildGridGroup(widthPx,heightPx,ox,oy);
@@ -425,7 +527,41 @@ function render(){
     if(gridGroup && state.grid.mode==="over") svg.appendChild(gridGroup);
     svg.addEventListener("click",()=>{ if(!lasso.active) setSelected(null); });
     svg.appendChild(labelGroup);
-    block.appendChild(header); block.appendChild(svg); inner.appendChild(block);
+    block.appendChild(header); block.appendChild(svg);
+
+    if(state.view.showRuler){
+      const metrics=computeGridMetrics(ox,oy);
+      if(metrics){
+        const highlightRect=(state.view.showRulerHighlight && !!state.view.showRuler && getSingleSelectionAbsRect(floor)) || null;
+        const rulerCanvas=document.createElement("canvas");
+        rulerCanvas.className="rulerCanvas";
+        rulerCanvas.style.pointerEvents="none";
+        if(state.view.rulerMode==="locked"){
+          rulerCanvas.style.position="absolute";
+          rulerCanvas.style.left="0";
+          rulerCanvas.style.top=`${header.offsetHeight||34}px`;
+          rulerCanvas.style.width=`${widthPx}px`;
+          rulerCanvas.style.height=`${heightPx}px`;
+          drawRulerCanvas(rulerCanvas,{widthPx,heightPx,bounds,metrics,floatingScale:1,highlightRect});
+          block.appendChild(rulerCanvas);
+        } else {
+          rulerCanvas.dataset.floatingFloor=floor.id;
+          drawRulerCanvas(rulerCanvas,{widthPx,heightPx,bounds,metrics,floatingScale:state.view.scale,highlightRect});
+          wrap.appendChild(rulerCanvas);
+          requestAnimationFrame(()=>{
+            const rect=svg.getBoundingClientRect();
+            const wrapRect=wrap.getBoundingClientRect();
+            rulerCanvas.style.position="absolute";
+            rulerCanvas.style.left=`${rect.left-wrapRect.left}px`;
+            rulerCanvas.style.top=`${rect.top-wrapRect.top}px`;
+            rulerCanvas.style.width=`${rect.width}px`;
+            rulerCanvas.style.height=`${rect.height}px`;
+            drawRulerCanvas(rulerCanvas,{widthPx:rect.width,heightPx:rect.height,bounds,metrics,floatingScale:state.view.scale,highlightRect});
+          });
+        }
+      }
+    }
+    inner.appendChild(block);
   }
   wrap.appendChild(inner);
   updateFloorSummary();

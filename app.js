@@ -15,6 +15,11 @@ const DEFAULT_UI={
     minorOpacity:0.18,
     majorOpacity:0.40,
     snapEnabled:false
+  },
+  ruler:{
+    show:true,
+    mode:"locked", // locked | floating
+    showHighlight:true
   }
 };
 
@@ -30,7 +35,7 @@ const state={
   visibleLabels:{},
   selected:null,
   selectedSnapshot:null,
-  view:{scale:1,tx:0,ty:0}
+  view:{scale:1,tx:0,ty:0,showRuler:DEFAULT_UI.ruler.show,rulerMode:DEFAULT_UI.ruler.mode,showRulerHighlight:DEFAULT_UI.ruler.showHighlight}
 };
 const drag={active:false, kind:null, floorId:null, roomId:null, itemId:null, itemIds:null, startItems:null, startClientX:0, startClientY:0, startNW:null, startRect:null, fixedPt:null, raf:false, preState:null, preSelected:null, moved:false, skipClickSelect:false};
 const pan={active:false, startX:0, startY:0, startTx:0, startTy:0};
@@ -151,7 +156,10 @@ function _snapshotViewConfiguration(){
     majorColor: String(state.grid.majorColor||"#ffffff"),
     minorOpacity: Number(state.grid.minorOpacity),
     majorOpacity: Number(state.grid.majorOpacity),
-    snapEnabled: !!state.grid.snapEnabled
+    snapEnabled: !!state.grid.snapEnabled,
+    showRuler: !!state.view.showRuler,
+    rulerMode: String(state.view.rulerMode||"locked"),
+    showRulerHighlight: !!state.view.showRulerHighlight
   };
 }
 
@@ -173,6 +181,9 @@ function _applyViewConfiguration(cfg){
   if(Number.isFinite(cfg.minorOpacity)) state.grid.minorOpacity=clamp(Number(cfg.minorOpacity),0,1);
   if(Number.isFinite(cfg.majorOpacity)) state.grid.majorOpacity=clamp(Number(cfg.majorOpacity),0,1);
   if(cfg.snapEnabled!=null) state.grid.snapEnabled=!!cfg.snapEnabled;
+  state.view.showRuler = (cfg.showRuler!=null) ? !!cfg.showRuler : DEFAULT_UI.ruler.show;
+  state.view.rulerMode = (cfg.rulerMode==="locked" || cfg.rulerMode==="floating") ? cfg.rulerMode : DEFAULT_UI.ruler.mode;
+  state.view.showRulerHighlight = (cfg.showRulerHighlight!=null) ? !!cfg.showRulerHighlight : DEFAULT_UI.ruler.showHighlight;
 }
 
 function _applyViewConfigurationFromActive(){
@@ -1333,6 +1344,12 @@ function syncViewPanelUI(){
   if(gMajo) gMajo.value=String(state.grid.majorOpacity ?? DEFAULT_UI.grid.majorOpacity);
   const gsnap=document.getElementById("gridSnapEnabled");
   if(gsnap) gsnap.checked=!!state.grid.snapEnabled;
+  const showRuler=document.getElementById("showRuler");
+  if(showRuler) showRuler.checked=!!state.view.showRuler;
+  const rulerMode=document.getElementById("rulerMode");
+  if(rulerMode) rulerMode.value=state.view.rulerMode||"locked";
+  const showRulerHighlight=document.getElementById("showRulerHighlight");
+  if(showRulerHighlight) showRulerHighlight.checked=!!state.view.showRulerHighlight;
 }
 
 function cycleGridSize(dir){
@@ -1387,7 +1404,10 @@ async function initApp(forceSeed=false){
       majorColor: (ui.grid||{}).majorColor ?? DEFAULT_UI.grid.majorColor,
       minorOpacity: (ui.grid||{}).minorOpacity ?? DEFAULT_UI.grid.minorOpacity,
       majorOpacity: (ui.grid||{}).majorOpacity ?? DEFAULT_UI.grid.majorOpacity,
-      snapEnabled: (ui.grid||{}).snapEnabled ?? DEFAULT_UI.grid.snapEnabled
+      snapEnabled: (ui.grid||{}).snapEnabled ?? DEFAULT_UI.grid.snapEnabled,
+      showRuler: DEFAULT_UI.ruler.show,
+      rulerMode: DEFAULT_UI.ruler.mode,
+      showRulerHighlight: DEFAULT_UI.ruler.showHighlight
     };
   }
 
