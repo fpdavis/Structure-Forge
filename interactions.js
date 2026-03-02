@@ -79,13 +79,27 @@ function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
 
   const canvasWrap=document.getElementById("canvasWrap");
-  const releaseSidebarFocus=()=>{
-    const ae=document.activeElement;
-    const left=document.querySelector(".left");
-    if(ae && left && left.contains(ae) && typeof ae.blur==="function") ae.blur();
+  const leftPanel=document.querySelector(".left");
+  const focusCanvas=()=>{
     if(canvasWrap && typeof canvasWrap.focus==="function") canvasWrap.focus({preventScroll:true});
   };
+  const releaseSidebarFocus=()=>{
+    const ae=document.activeElement;
+    if(ae && leftPanel && leftPanel.contains(ae) && typeof ae.blur==="function") ae.blur();
+    focusCanvas();
+  };
   canvasWrap?.addEventListener("pointerdown", releaseSidebarFocus);
+
+  const isSidebarControl=(el)=>{
+    if(!el || !el.closest) return false;
+    return !!el.closest('input[type="checkbox"],input[type="radio"],input[type="range"],input[type="color"],select,button,input[type="text"],input[type="number"],textarea');
+  };
+  leftPanel?.addEventListener("change",(ev)=>{ if(isSidebarControl(ev.target)) focusCanvas(); });
+  leftPanel?.addEventListener("click",(ev)=>{ if(isSidebarControl(ev.target)) focusCanvas(); });
+  leftPanel?.addEventListener("keydown",(ev)=>{
+    if(ev.key!=="Enter") return;
+    if(isSidebarControl(ev.target)) focusCanvas();
+  });
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
   ppi.addEventListener("input",()=>{
     state.ppi=parseInt(ppi.value,10);
