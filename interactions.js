@@ -77,6 +77,29 @@ function updateSelectedXYInputs(obj){
 
 function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
+
+  const canvasWrap=document.getElementById("canvasWrap");
+  const leftPanel=document.querySelector(".left");
+  const focusCanvas=()=>{
+    if(canvasWrap && typeof canvasWrap.focus==="function") canvasWrap.focus({preventScroll:true});
+  };
+  const releaseSidebarFocus=()=>{
+    const ae=document.activeElement;
+    if(ae && leftPanel && leftPanel.contains(ae) && typeof ae.blur==="function") ae.blur();
+    focusCanvas();
+  };
+  canvasWrap?.addEventListener("pointerdown", releaseSidebarFocus);
+
+  const isSidebarControl=(el)=>{
+    if(!el || !el.closest) return false;
+    return !!el.closest('input[type="checkbox"],input[type="radio"],input[type="range"],input[type="color"],select,button,input[type="text"],input[type="number"],textarea');
+  };
+  leftPanel?.addEventListener("change",(ev)=>{ if(isSidebarControl(ev.target)) focusCanvas(); });
+  leftPanel?.addEventListener("click",(ev)=>{ if(isSidebarControl(ev.target)) focusCanvas(); });
+  leftPanel?.addEventListener("keydown",(ev)=>{
+    if(ev.key!=="Enter") return;
+    if(isSidebarControl(ev.target)) focusCanvas();
+  });
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
   ppi.addEventListener("input",()=>{
     state.ppi=parseInt(ppi.value,10);
@@ -138,6 +161,8 @@ function wire(){
   document.getElementById("gridMajorOpacity")?.addEventListener("input",(ev)=>{ state.grid.majorOpacity=clamp(parseFloat(ev.target.value),0,1); render(); _commitViewConfiguration(); });
   document.getElementById("gridSnapEnabled")?.addEventListener("change",(ev)=>{ state.grid.snapEnabled=!!ev.target.checked; _commitViewConfiguration(); });
   document.getElementById("gridSize")?.addEventListener("change",(ev)=>{ state.grid.minorStep=parseFloat(ev.target.value); render(); _commitViewConfiguration(); });
+  document.getElementById("showRuler")?.addEventListener("change",(ev)=>{ state.view.showRuler=!!ev.target.checked; render(); _commitViewConfiguration(); });
+  document.getElementById("showRulerHighlight")?.addEventListener("change",(ev)=>{ state.view.showRulerHighlight=!!ev.target.checked; render(); _commitViewConfiguration(); });
 
   document.getElementById("viewSaveDefault")?.addEventListener("click",(e)=>{e.preventDefault(); saveViewDefaults();});
   document.getElementById("viewLoadDefault")?.addEventListener("click",(e)=>{e.preventDefault(); loadViewDefaults();});
