@@ -77,6 +77,15 @@ function updateSelectedXYInputs(obj){
 
 function wire(){
   document.getElementById("navToggle").addEventListener("click",(e)=>{e.preventDefault(); document.body.classList.toggle("navCollapsed");});
+
+  const canvasWrap=document.getElementById("canvasWrap");
+  const releaseSidebarFocus=()=>{
+    const ae=document.activeElement;
+    const left=document.querySelector(".left");
+    if(ae && left && left.contains(ae) && typeof ae.blur==="function") ae.blur();
+    if(canvasWrap && typeof canvasWrap.focus==="function") canvasWrap.focus({preventScroll:true});
+  };
+  canvasWrap?.addEventListener("pointerdown", releaseSidebarFocus);
   const ppi=document.getElementById("ppi"); const ppiValue=document.getElementById("ppiValue");
   ppi.addEventListener("input",()=>{
     state.ppi=parseInt(ppi.value,10);
